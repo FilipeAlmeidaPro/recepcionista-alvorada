@@ -5,7 +5,7 @@ Brasil. Ele identifica o paciente, entende uma restrição falada, consulta a
 agenda real, propõe horário, confirma em voz alta e grava — ou transfere para
 um humano quando é o certo a fazer.
 
-*[English version](README.en.md)*
+*[English version](README.en.md)* · **[Documento de arquitetura →](https://claude.ai/code/artifact/163f86c8-fe48-46af-8029-563ef00dbcb7)** ([fonte](docs/arquitetura.html))
 
 O cenário que o projeto persegue é um só, feito a fundo:
 

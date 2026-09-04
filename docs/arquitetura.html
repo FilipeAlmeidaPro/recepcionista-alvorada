@@ -1,0 +1,521 @@
+<meta charset="utf-8">
+<title>Portão de Escrita</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ground:#f4f5f3; --surface:#ffffff; --surface-2:#e9ebe8;
+    --ink:#0e120f; --ink-2:#4a544c; --ink-3:#79837a;
+    --line:rgba(14,18,15,.14); --line-2:rgba(14,18,15,.07);
+    --accent:#16a34a; --accent-soft:rgba(22,163,74,.10);
+    --danger:#b5361f; --danger-soft:rgba(181,54,31,.09);
+    --r1:8px; --r2:14px; --r3:16px;
+    --sans:"Space Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#0b0b0b; --surface:#131513; --surface-2:#1a1e1a;
+      --ink:#f8f8f6; --ink-2:#a3ada6; --ink-3:#6e786f;
+      --line:rgba(248,248,246,.15); --line-2:rgba(248,248,246,.07);
+      --accent:#4ade80; --accent-soft:rgba(74,222,128,.12);
+      --danger:#f0705a; --danger-soft:rgba(240,112,90,.13);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0b0b0b; --surface:#131513; --surface-2:#1a1e1a;
+    --ink:#f8f8f6; --ink-2:#a3ada6; --ink-3:#6e786f;
+    --line:rgba(248,248,246,.15); --line-2:rgba(248,248,246,.07);
+    --accent:#4ade80; --accent-soft:rgba(74,222,128,.12);
+    --danger:#f0705a; --danger-soft:rgba(240,112,90,.13);
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--ink);font:400 16px/1.62 var(--sans);
+    margin:0;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:64px 28px 120px}
+  .prosa{max-width:68ch}
+
+  h1{font:500 clamp(30px,5vw,44px)/1.12 var(--sans);letter-spacing:-.025em;
+    margin:0 0 16px;text-wrap:balance}
+  h2{font:500 13px/1.3 var(--mono);text-transform:uppercase;letter-spacing:.14em;
+    color:var(--ink-3);margin:76px 0 20px;padding-bottom:10px;
+    border-bottom:.5px solid var(--line)}
+  h3{font:500 19px/1.35 var(--sans);margin:36px 0 10px;letter-spacing:-.01em;
+    text-wrap:balance}
+  p{margin:0 0 16px;color:var(--ink-2)}
+  p.destaque{color:var(--ink);font-size:19px;line-height:1.55}
+  strong{color:var(--ink);font-weight:500}
+  code{font:400 .88em var(--mono);background:var(--surface-2);
+    padding:.12em .38em;border-radius:5px;color:var(--ink)}
+  a{color:var(--accent)}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:26px 0 0}
+  .chip{font:500 12px var(--mono);padding:6px 12px;border-radius:999px;
+    background:var(--surface);border:.5px solid var(--line);color:var(--ink-2)}
+  .chip b{color:var(--accent);font-weight:500}
+
+  figure{margin:36px 0 12px}
+  figure svg{display:block;width:100%;max-width:100%;height:auto;
+    color:var(--ink-2)}
+  figcaption{font:400 13.5px/1.5 var(--sans);color:var(--ink-3);
+    margin-top:14px;max-width:64ch}
+  figcaption b{color:var(--ink-2);font-weight:500}
+
+  /* marcas dos diagramas — classes no CSS da página, nunca dentro do <svg> */
+  .d-caixa{fill:var(--surface);stroke:currentColor;stroke-opacity:.32;stroke-width:1}
+  .d-caixa-forte{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.4}
+  .d-caixa-fraca{fill:var(--surface-2);stroke:currentColor;stroke-opacity:.18;stroke-width:1}
+  .d-rot{fill:var(--ink);font:500 13px var(--sans)}
+  .d-sub{fill:var(--ink-3);font:400 10.5px var(--mono)}
+  .d-num{fill:var(--ink-2);font:500 11.5px var(--mono)}
+  .d-num-forte{fill:var(--accent);font:500 11.5px var(--mono)}
+  .d-eixo{stroke:currentColor;stroke-opacity:.5;stroke-width:1.3;fill:none}
+  .d-borda{stroke:currentColor;stroke-opacity:.2;stroke-width:1;fill:none}
+  .d-morto{stroke:var(--danger);stroke-width:1.3;stroke-dasharray:6 4;fill:none;
+    stroke-opacity:.85}
+  .d-txt-morto{fill:var(--danger);font:500 11.5px var(--mono)}
+  .d-seta{fill:var(--ink-3)}
+  .d-seta-morta{fill:var(--danger)}
+  .d-barra-stt{fill:var(--ink-3)}
+  .d-barra-llm{fill:var(--danger)}
+  .d-barra-tts{fill:var(--ink-3);opacity:.65}
+  .d-barra-det{fill:var(--accent)}
+  .d-alvo{stroke:var(--accent);stroke-width:1.4;stroke-dasharray:4 3}
+  .d-ok{fill:var(--accent);font:500 14px var(--sans)}
+  .d-erro{fill:var(--danger);font:500 14px var(--sans)}
+  .d-regra{fill:var(--ink-2);font:400 11.5px var(--mono)}
+  .d-regra-forte{fill:var(--accent);font:500 11.5px var(--mono)}
+
+  .tabela{overflow-x:auto;margin:22px 0}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:460px}
+  th,td{text-align:left;padding:9px 16px 9px 0;border-bottom:.5px solid var(--line-2)}
+  th{font:500 11.5px var(--mono);text-transform:uppercase;letter-spacing:.09em;
+    color:var(--ink-3);border-bottom-color:var(--line)}
+  td{color:var(--ink-2)}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;
+    font-family:var(--mono);font-size:13.5px}
+  td.forte{color:var(--ink);font-weight:500}
+  .bom{color:var(--accent)}
+  .ruim{color:var(--danger)}
+
+  .nota{border-left:2px solid var(--accent);background:var(--accent-soft);
+    padding:16px 20px;border-radius:0 var(--r1) var(--r1) 0;margin:26px 0}
+  .nota p{margin:0;color:var(--ink)}
+  .nota p+p{margin-top:10px}
+
+  pre{background:var(--surface);border:.5px solid var(--line);
+    border-radius:var(--r2);padding:18px 20px;overflow-x:auto;
+    font:400 13px/1.65 var(--mono);color:var(--ink-2);margin:20px 0}
+  pre .b{color:var(--danger)}
+  pre .g{color:var(--accent)}
+
+  .rodape{margin-top:88px;padding-top:24px;border-top:.5px solid var(--line);
+    color:var(--ink-3);font-size:13.5px}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+<header class="prosa">
+  <h1>Portão de escrita</h1>
+  <p class="destaque">Arquitetura de uma recepcionista de clínica por voz, em
+  português do Brasil. A tese é uma frase: <strong>o modelo propõe, o código
+  escreve.</strong></p>
+  <div class="chips">
+    <span class="chip"><b>136</b> testes</span>
+    <span class="chip"><b>0</b> dependências</span>
+    <span class="chip"><b>10</b> regras de validação</span>
+    <span class="chip"><b>40</b> cenários de eval</span>
+    <span class="chip"><b>5 544</b> linhas</span>
+  </div>
+</header>
+
+<h2>O turno de voz</h2>
+<div class="prosa">
+  <p>Uma ligação é uma sequência de turnos, e cada turno percorre seis
+  estágios. Três são rede, três são código local. A diferença entre eles é de
+  quatro ordens de grandeza — e é isso que decide onde vale otimizar.</p>
+</div>
+
+<figure>
+<svg viewBox="0 0 960 330" role="img" aria-label="Pipeline de um turno de voz em seis estágios, com a latência medida de cada um, e uma barra proporcional mostrando que só o STT já consome todo o orçamento de 800 milissegundos.">
+  <defs>
+    <marker id="s1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
+            markerHeight="6" orient="auto-start-reverse">
+      <path class="d-seta" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+  </defs>
+
+  <!-- fila de estágios -->
+  <g>
+    <rect class="d-caixa" x="54" y="34" width="132" height="72" rx="12"/>
+    <text class="d-rot" x="70" y="60">STT</text>
+    <text class="d-sub" x="70" y="76">whisper-v3-turbo</text>
+    <text class="d-num" x="70" y="94">785 ms</text>
+
+    <rect class="d-caixa-forte" x="198" y="34" width="132" height="72" rx="12"/>
+    <text class="d-rot" x="214" y="60">Normalizador</text>
+    <text class="d-sub" x="214" y="76">determinístico</text>
+    <text class="d-num-forte" x="214" y="94">0,005 ms</text>
+
+    <rect class="d-caixa" x="342" y="34" width="132" height="72" rx="12"/>
+    <text class="d-rot" x="358" y="60">Orquestrador</text>
+    <text class="d-sub" x="358" y="76">LLM + 6 tools</text>
+    <text class="d-num" x="358" y="94">1 446 ms</text>
+
+    <rect class="d-caixa-forte" x="486" y="34" width="132" height="72" rx="12"/>
+    <text class="d-rot" x="502" y="60">Validador</text>
+    <text class="d-sub" x="502" y="76">10 regras</text>
+    <text class="d-num-forte" x="502" y="94">0,084 ms</text>
+
+    <rect class="d-caixa-forte" x="630" y="34" width="132" height="72" rx="12"/>
+    <text class="d-rot" x="646" y="60">Banco</text>
+    <text class="d-sub" x="646" y="76">SQLite</text>
+    <text class="d-num-forte" x="646" y="94">0,068 ms</text>
+
+    <rect class="d-caixa" x="774" y="34" width="132" height="72" rx="12"/>
+    <text class="d-rot" x="790" y="60">TTS</text>
+    <text class="d-sub" x="790" y="76">say, local</text>
+    <text class="d-num" x="790" y="94">534 ms</text>
+  </g>
+  <g class="d-eixo" marker-end="url(#s1)">
+    <path d="M186,70 L196,70"/><path d="M330,70 L340,70"/>
+    <path d="M474,70 L484,70"/><path d="M618,70 L628,70"/>
+    <path d="M762,70 L772,70"/>
+  </g>
+  <path class="d-eixo" marker-end="url(#s1)" d="M20,70 L52,70"/>
+  <text class="d-sub" x="20" y="24">fala do paciente</text>
+  <text class="d-sub" x="906" y="24" text-anchor="end">resposta falada</text>
+
+  <!-- onde o tempo vai -->
+  <text class="d-sub" x="54" y="176">ONDE OS 2 765 ms VÃO</text>
+  <g>
+    <rect class="d-barra-stt" x="54" y="188" width="238" height="26" rx="4"/>
+    <rect class="d-barra-llm" x="296" y="188" width="444" height="26" rx="4"/>
+    <rect class="d-barra-tts" x="744" y="188" width="162" height="26" rx="4"/>
+  </g>
+  <text class="d-num" x="173" y="234" text-anchor="middle">STT · 785 ms</text>
+  <text class="d-num" x="518" y="234" text-anchor="middle">orquestrador + LLM · 1 446 ms</text>
+  <text class="d-num" x="825" y="234" text-anchor="middle">TTS · 534 ms</text>
+
+  <!-- alvo -->
+  <path class="d-alvo" d="M300,180 L300,258"/>
+  <text class="d-num-forte" x="308" y="256">alvo de mercado: 800 ms — o STT sozinho já o consome</text>
+
+  <!-- anotação da camada determinística -->
+  <path class="d-borda" d="M294,214 L294,290 L326,290"/>
+  <text class="d-num-forte" x="334" y="294">normalizador + validador + banco = 0,157 ms · 2 px nesta escala</text>
+</svg>
+<figcaption><b>O portão de escrita não custa nada.</b> Os três estágios
+determinísticos somam 0,157 ms — dois pixels na barra. O gargalo é o STT em
+lote: o Whisper da Groq não faz streaming, então segmenta-se a fala com VAD e
+manda o trecho inteiro. Trocar por STT em streaming pago é o que derruba esse
+número; nada mais derruba.</figcaption>
+</figure>
+
+<h2>O portão</h2>
+<div class="prosa">
+  <p>Nenhuma ferramenta de escrita é chamada direto pelo modelo. Ele emite uma
+  <strong>intenção</strong> — uma proposta — e dez regras em código decidem se
+  ela vira linha no banco.</p>
+  <p>A seta que não existe é a parte importante do desenho.</p>
+</div>
+
+<figure>
+<svg viewBox="0 0 960 410" role="img" aria-label="O orquestrador não escreve no banco diretamente: essa seta está riscada. Ele emite uma intenção que passa por dez regras de validação antes das ferramentas gravarem; quando reprovada, a intenção volta para o agente re-propor.">
+  <defs>
+    <marker id="s2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
+            markerHeight="6" orient="auto-start-reverse">
+      <path class="d-seta" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+    <marker id="s2m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
+            markerHeight="6" orient="auto-start-reverse">
+      <path class="d-seta-morta" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+  </defs>
+
+  <!-- caminho que não existe -->
+  <text class="d-txt-morto" x="490" y="28" text-anchor="middle">escrita direta pelo modelo — não existe</text>
+  <path class="d-morto" marker-end="url(#s2m)"
+        d="M84,168 L84,50 L896,50 L896,166"/>
+  <g class="d-morto" stroke-dasharray="0" stroke-width="1.8">
+    <path d="M482,42 L498,58"/><path d="M498,42 L482,58"/>
+  </g>
+
+  <!-- fluxo real -->
+  <rect class="d-caixa" x="18" y="170" width="132" height="72" rx="12"/>
+  <text class="d-rot" x="34" y="200">Orquestrador</text>
+  <text class="d-sub" x="34" y="218">LLM + 6 tools</text>
+
+  <rect class="d-caixa" x="220" y="170" width="100" height="72" rx="12"/>
+  <text class="d-rot" x="236" y="200">Intenção</text>
+  <text class="d-sub" x="236" y="218">proposta</text>
+
+  <rect class="d-caixa-forte" x="390" y="80" width="228" height="272" rx="14"/>
+  <text class="d-rot" x="406" y="108">Validador</text>
+  <text class="d-regra" x="406" y="136">R1 · chave de idempotência</text>
+  <text class="d-regra" x="406" y="158">R2 · cadastro existe</text>
+  <text class="d-regra" x="406" y="180">R3 · slot existe</text>
+  <text class="d-regra" x="406" y="202">R4 · ainda não passou</text>
+  <text class="d-regra" x="406" y="224">R5 · continua livre</text>
+  <text class="d-regra" x="406" y="246">R6 · especialidade confere</text>
+  <text class="d-regra" x="406" y="268">R7 · dentro da restrição</text>
+  <text class="d-regra-forte" x="406" y="290">R8 · confirmação verbal bate</text>
+  <text class="d-regra" x="406" y="312">R9 · o slot foi oferecido</text>
+  <text class="d-regra" x="406" y="334">R10 · origem do reagendamento</text>
+
+  <rect class="d-caixa" x="688" y="170" width="88" height="72" rx="12"/>
+  <text class="d-rot" x="704" y="200">tools</text>
+  <text class="d-sub" x="704" y="218">escrita</text>
+
+  <rect class="d-caixa" x="846" y="170" width="100" height="72" rx="12"/>
+  <text class="d-rot" x="862" y="200">Banco</text>
+  <text class="d-sub" x="862" y="218">SQLite</text>
+
+  <g class="d-eixo" marker-end="url(#s2)">
+    <path d="M150,206 L216,206"/>
+    <path d="M320,206 L386,206"/>
+    <path d="M618,206 L684,206"/>
+    <path d="M776,206 L842,206"/>
+  </g>
+  <text class="d-sub" x="183" y="196" text-anchor="middle">propõe</text>
+  <text class="d-sub" x="651" y="196" text-anchor="middle">aprovado</text>
+  <text class="d-sub" x="809" y="196" text-anchor="middle">grava</text>
+
+  <!-- caminho de reprovação -->
+  <path class="d-eixo" marker-end="url(#s2)" d="M504,352 L504,386 L270,386 L270,244"/>
+  <text class="d-sub" x="524" y="382">reprovado · o agente explica em uma frase e re-propõe</text>
+</svg>
+<figcaption>O modelo nunca toca o banco. A regra mais cara de esquecer mora uma
+camada abaixo até do validador: um <b>índice único parcial</b> em
+<code>agendamentos(slot_id) WHERE status='confirmado'</code> faz double-booking
+ser <b>impossível por construção</b>, não improvável por sorte do prompt. Um
+teste ignora as ferramentas e escreve direto no banco; o banco recusa.</figcaption>
+</figure>
+
+<h2>R8 — a regra que pega alucinação</h2>
+<div class="prosa">
+  <p>O validador não recebe só argumentos estruturados. Recebe <strong>a frase
+  que o agente falou em voz alta</strong>, lida da transcrição — não a que ele
+  alega ter falado.</p>
+  <p>Se ele consultou terça e confirmou "quinta", as entidades divergem e a
+  escrita é bloqueada, com todos os argumentos corretos.</p>
+</div>
+
+<figure>
+<svg viewBox="0 0 900 350" role="img" aria-label="Comparação entre as entidades que o agente falou em voz alta e as do slot que ele ia gravar: profissional, dia do mês e hora batem, mas o dia da semana diverge, e por isso a regra R8 bloqueia a escrita.">
+  <text class="d-sub" x="40" y="28">O QUE O AGENTE FALOU</text>
+  <text class="d-sub" x="500" y="28">O QUE ELE IA GRAVAR</text>
+
+  <rect class="d-caixa" x="40" y="40" width="360" height="76" rx="12"/>
+  <text class="d-regra" x="56" y="66">"Dra. Thaís Bittencourt,</text>
+  <text class="d-regra" x="56" y="86">quinta-feira, dia 8 de setembro,</text>
+  <text class="d-regra" x="56" y="106">às 18h. Confirma?"</text>
+
+  <rect class="d-caixa-fraca" x="500" y="40" width="360" height="76" rx="12"/>
+  <text class="d-regra" x="516" y="66">slot 167 · Dra. Thaís Bittencourt</text>
+  <text class="d-regra" x="516" y="86">2026-09-08 18:00 · Ortopedia</text>
+  <text class="d-sub" x="516" y="106">terça-feira</text>
+
+  <text class="d-sub" x="40" y="156">ENTIDADES COMPARADAS</text>
+  <path class="d-borda" d="M40,164 L860,164"/>
+
+  <g>
+    <text class="d-regra" x="40" y="192">profissional</text>
+    <text class="d-regra" x="230" y="192">Thaís Bittencourt</text>
+    <text class="d-ok" x="452" y="193">✓</text>
+    <text class="d-regra" x="500" y="192">Thaís Bittencourt</text>
+
+    <text class="d-regra" x="40" y="226">dia da semana</text>
+    <text class="d-txt-morto" x="230" y="226">quinta-feira</text>
+    <text class="d-erro" x="452" y="227">✗</text>
+    <text class="d-regra" x="500" y="226">terça-feira</text>
+
+    <text class="d-regra" x="40" y="260">dia do mês</text>
+    <text class="d-regra" x="230" y="260">8</text>
+    <text class="d-ok" x="452" y="261">✓</text>
+    <text class="d-regra" x="500" y="260">8</text>
+
+    <text class="d-regra" x="40" y="294">hora</text>
+    <text class="d-regra" x="230" y="294">18:00</text>
+    <text class="d-ok" x="452" y="295">✓</text>
+    <text class="d-regra" x="500" y="294">18:00</text>
+  </g>
+
+  <path class="d-borda" d="M40,312 L860,312"/>
+  <rect class="d-caixa-fraca" x="40" y="322" width="360" height="0" rx="0"/>
+  <text class="d-txt-morto" x="40" y="340">R8 reprovada · nada foi gravado · o paciente ouve a correção</text>
+</svg>
+<figcaption>Três de quatro entidades batem. Uma não. A escrita não acontece.
+Alucinação de entidade deixa de ser métrica de relatório e vira <b>regra
+executável</b>. <b>Hesitação e silêncio não são consentimento</b> —
+<code>"hmm, sei lá"</code> é lido como indefinido e bloqueia igual. Cancelar
+exige a mesma confirmação que marcar: cancelar por engano faz o paciente perder
+a vaga para o próximo da fila.</figcaption>
+</figure>
+
+<pre><span class="b">[BLOQUEIO]</span>  agente confirma o dia errado    R8_confirmacao
+             └─ disse dia da semana 3, o slot é 1
+<span class="b">[BLOQUEIO]</span>  agente troca o profissional     R8_confirmacao
+             └─ disse Dra. Larissa Nakamura, o slot é com Dra. Thaís Bittencourt
+<span class="b">[BLOQUEIO]</span>  paciente hesitou                R8_confirmacao
+             └─ resposta «hmm, sei lá» lida como «indefinido»
+<span class="g">[GRAVOU]</span>    tudo certo                      regras ok: 10/10</pre>
+
+<h2>Três coisas que o modelo não controla</h2>
+<div class="prosa">
+  <p>O orquestrador tira três decisões das mãos do LLM, de propósito.</p>
+  <h3>1. A restrição do paciente</h3>
+  <p>Extraída da fala pelo normalizador determinístico, turno a turno. O modelo
+  escolhe a especialidade; o código escolhe o filtro. <strong>Se a restrição
+  viesse do resumo do modelo, a R7 estaria validando o modelo contra ele
+  mesmo.</strong></p>
+  <h3>2. A frase de confirmação</h3>
+  <p>Lida da transcrição do turno anterior, não auto-reportada.</p>
+  <h3>3. A escrita</h3>
+  <p>Passa inteira pelo validador, sem exceção e sem caminho alternativo.</p>
+</div>
+
+<h2>Os números</h2>
+<div class="prosa">
+  <p>Todos medidos no repositório, nenhum estimado.</p>
+</div>
+
+<h3>Extração de entidade — 50 falas rotuladas</h3>
+<div class="tabela">
+<table>
+  <tr><th>método</th><th class="n">acerto</th><th class="n">latência</th><th>custo por chamada</th></tr>
+  <tr><td>regex ingênuo</td><td class="n">8%</td><td class="n">~0</td><td>US$ 0</td></tr>
+  <tr><td>LLM cru <code>gemini-3.5-flash</code></td><td class="n">93%</td><td class="n">3 300 ms</td><td>1 chamada de API</td></tr>
+  <tr><td class="forte">normalizador determinístico</td><td class="n forte bom">100%*</td><td class="n forte bom">0,005 ms</td><td>US$ 0</td></tr>
+</table>
+</div>
+<div class="prosa">
+  <p style="font-size:14px">* parcialmente circular — escrevi os casos e o código.</p>
+</div>
+
+<div class="nota">
+  <p><strong>O LLM cru acerta 93%.</strong> Isso contradiz a premissa de que
+  normalizar português falado é onde tudo quebra — e muda o argumento a favor
+  do normalizador determinístico.</p>
+  <p>Ele não se justifica por acurácia. Justifica-se por ser <strong>660 000×
+  mais rápido</strong>, por não consumir cota, e por ser determinístico — que é
+  exatamente o que a R7 precisa para não validar o modelo contra ele mesmo. Os
+  7% que faltam sozinhos não pagariam 300 linhas de parser. A latência e o
+  determinismo pagam.</p>
+</div>
+
+<h3>Suíte de áudio — 10 falas × 5 condições</h3>
+<div class="tabela">
+<table>
+  <tr><th>condição</th><th class="n">horário</th><th class="n">data</th><th class="n">dígitos</th><th class="n">especialidade</th><th class="n">total</th></tr>
+  <tr><td>limpo</td><td class="n">3/3</td><td class="n">2/2</td><td class="n">2/3</td><td class="n">2/2</td><td class="n forte">90%</td></tr>
+  <tr><td>ruído leve</td><td class="n">3/3</td><td class="n">2/2</td><td class="n">3/3</td><td class="n">2/2</td><td class="n forte bom">100%</td></tr>
+  <tr><td>ruído forte</td><td class="n">3/3</td><td class="n">2/2</td><td class="n">3/3</td><td class="n">2/2</td><td class="n forte bom">100%</td></tr>
+  <tr><td>áudio cortado</td><td class="n">3/3</td><td class="n">1/2</td><td class="n">0/3</td><td class="n">2/2</td><td class="n forte ruim">60%</td></tr>
+  <tr><td>voz difícil</td><td class="n">0/3</td><td class="n">0/2</td><td class="n">0/3</td><td class="n">0/2</td><td class="n forte ruim">0%</td></tr>
+</table>
+</div>
+
+<div class="nota">
+  <p><strong>Ruído não é o problema; truncamento é.</strong> Isso contraria a
+  premissa do plano original. O risco real é o VAD cortar a fala, não o barulho
+  de fundo.</p>
+  <p>E o pior caso não é falhar: é <strong>acertar plausivelmente errado</strong>.
+  Um telefone cortado vira <code>1198765</code> — um número que parece válido e
+  não é. É exatamente por isso que a confirmação dígito-a-dígito existe.</p>
+</div>
+
+<h3>Suíte de eval — 40 cenários em 7 famílias</h3>
+<div class="tabela">
+<table>
+  <tr><th>agente</th><th class="n">resultado</th></tr>
+  <tr><td>baseline de regras, sem LLM nenhum</td><td class="n forte">37/40</td></tr>
+  <tr><td>Groq <code>gpt-oss-120b</code> — família <em>feliz</em></td><td class="n forte bom">6/6</td></tr>
+  <tr><td>Groq <code>gpt-oss-120b</code> — família <em>risco clínico</em></td><td class="n forte bom">2/2</td></tr>
+  <tr><td>Groq <code>gpt-oss-120b</code> — família <em>limites de escopo</em></td><td class="n">4/5</td></tr>
+  <tr><td>demais famílias</td><td class="n">cota diária esgotada</td></tr>
+</table>
+</div>
+
+<div class="nota">
+  <p><strong>92% para uma recepcionista de 150 linhas de <code>if</code> é um
+  achado ruim, não uma vitória.</strong> Significa que, com paciente
+  roteirizado, a suíte testa a máquina e não o modelo — o roteiro entrega a
+  fala certa na hora certa e carrega o agente burro no colo.</p>
+  <p>O poder discriminante mora no <strong>paciente sintético</strong>: um
+  segundo LLM com objetivo privado e personalidade, que não segue roteiro. O
+  modo roteirizado continua valendo como rede de regressão determinística no
+  CI, que é barata e nunca falha por sorteio.</p>
+</div>
+
+<h2>O que a suíte encontrou</h2>
+<div class="prosa">
+  <p>Cada achado veio de uma camada específica. Nenhum apareceu sozinho.</p>
+</div>
+<div class="tabela">
+<table>
+  <tr><th>achado</th><th>quem pegou</th></tr>
+  <tr><td><code>"boa noite"</code> virava restrição de horário 18h–21h — na primeira frase de toda ligação</td><td>testes de unidade</td></tr>
+  <tr><td>o agente transferia por dor no peito <strong>e seguia oferecendo horário</strong> no mesmo turno</td><td>o painel renderizado</td></tr>
+  <tr><td>schema de tool sem <code>null</code>: a Groq valida no servidor e recusava 6 cenários</td><td>rodar contra o provedor real</td></tr>
+  <tr><td>Gemini 3.x recusa a chamada se o <code>thought_signature</code> não voltar no histórico</td><td>rodar contra o provedor real</td></tr>
+  <tr><td>o modelo responde em markdown; o TTS leria <code>- 18h00</code> como "hífen dezoito"</td><td>rodar contra o provedor real</td></tr>
+  <tr><td>o STT ouve <strong>"não" como "nove"</strong> e a correção no ditado vira <code>4392</code></td><td>suíte de áudio</td></tr>
+  <tr><td><code>"depois DAR seis"</code> — o STT troca palavra de ligação e o parser quebra</td><td>suíte de áudio</td></tr>
+  <tr><td><code>"de manhã, antes das onze"</code> devolvia só <em>até 11h</em></td><td>suíte de áudio</td></tr>
+</table>
+</div>
+
+<div class="nota">
+  <p>O achado do painel merece nota: <strong>o teste estava passando.</strong>
+  Ele só proibia <code>propor_reserva</code>, e o agente de fato não marcou.
+  Mas continuar atendendo depois de escalar risco clínico é pior do que não ter
+  escalado — dá ao paciente a impressão de que a máquina ainda cuida dele.</p>
+  <p>Só dava para ver <em>olhando</em> a ligação renderizada. Suíte verde não é
+  o mesmo que comportamento certo.</p>
+</div>
+
+<h2>O que a gratuidade custou</h2>
+<div class="tabela">
+<table>
+  <tr><th>provedor</th><th>teto que morde</th><th>consequência</th></tr>
+  <tr><td>Gemini</td><td class="forte">20 requisições/dia <em>por modelo</em></td><td>~4 ligações por dia</td></tr>
+  <tr><td>Groq</td><td class="forte">200 000 tokens/dia</td><td>~1,3 rodadas da suíte por dia</td></tr>
+  <tr><td>Groq</td><td>8 000 tokens/minuto</td><td>a rodada leva dezenas de minutos</td></tr>
+  <tr><td>Groq Whisper</td><td>7 200 s de áudio/hora</td><td>cota <strong>separada</strong> — a suíte de áudio roda à vontade</td></tr>
+  <tr><td>macOS <code>say</code></td><td class="bom">nenhum</td><td>grátis de verdade, não free tier</td></tr>
+</table>
+</div>
+<div class="prosa">
+  <p>Latência medida por chamada isolada: Groq <code>gpt-oss-120b</code>
+  <strong>804 ms</strong> · Gemini <code>flash-lite</code> 2 600 ms ·
+  <code>3.5-flash</code> 3 700 ms · <code>3.8-flash</code> 41 600 ms. O modelo
+  Gemini mais novo é o pior dos quatro para esta tarefa: raciocínio pesado que
+  atrasa 16× e ainda quebra o formato de saída.</p>
+</div>
+
+<h2>O que falta, e por quê</h2>
+<div class="prosa">
+  <p><strong>A camada que falta é o microfone e o WebRTC no navegador.</strong>
+  Tudo abaixo disso está construído e medido — <code>python3 -m clinica.ligar</code>
+  roda a ligação inteira, do áudio de entrada ao áudio de saída, com o tempo de
+  cada estágio na tela.</p>
+  <p><strong>Fora de escopo de propósito:</strong> convênios, preços, ERP,
+  pagamentos, ligações ativas, funil comercial. Arquitetura desenhada para
+  todos, nenhum implementado. Saber o que não entregar dentro do prazo é sinal
+  de senioridade, não de falta de ambição.</p>
+  <p><strong>Por que não Vapi, Retell ou n8n:</strong> escondem exatamente o que
+  este documento mostra — o trace por estágio, o controle do turno, a camada de
+  validação. Eu me diferenciaria com o que a ferramenta faz por mim. Em produção
+  com prazo curto, usaria. Num walkthrough técnico, não.</p>
+</div>
+
+<div class="rodape">
+  Recepcionista Alvorada · código em
+  <a href="https://github.com/FilipeAlmeidaPro/recepcionista-alvorada">github.com/FilipeAlmeidaPro/recepcionista-alvorada</a>
+  · MIT · nenhum dado real: os 40 pacientes, os CPFs com dígito verificador
+  válido e a agenda inteira são gerados por <code>Random(42)</code>.
+</div>
+</div>

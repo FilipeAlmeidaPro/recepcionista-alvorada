@@ -5,7 +5,7 @@ multi-specialty clinic. It identifies the caller, understands a spoken
 constraint, queries a real calendar, offers a slot, confirms out loud, and
 writes — or escalates to a human when that's the right call.
 
-*[Versão em português](README.md)*
+*[Versão em português](README.md)* · **[Architecture document →](https://claude.ai/code/artifact/163f86c8-fe48-46af-8029-563ef00dbcb7)** ([source](docs/arquitetura.html), in Portuguese)
 
 The project chases a single scenario, in depth:
 
