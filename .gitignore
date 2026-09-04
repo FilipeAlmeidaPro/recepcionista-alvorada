@@ -1,0 +1,17 @@
+# Gerados — o banco inteiro se reconstrói com `python3 -m clinica.seed`
+data/*.db
+data/*.db-wal
+data/*.db-shm
+audio/
+painel*.html
+rodada*.json
+
+# Segredos — nenhuma chave mora neste repositório
+.env
+*.env
+!exemplo.env
+
+__pycache__/
+*.py[cod]
+.DS_Store
+.venv/
