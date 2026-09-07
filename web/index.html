@@ -439,9 +439,20 @@ async function enviar(){
       headers:{"X-Ligacao": ligacao, "Content-Type":"application/octet-stream"},
       body: blob});
     const d = await r.json();
-    if (d.erro){ falha({audio_curto_demais:"Fala muito curta — segure o botão um pouco mais.",
-                        audio_ilegivel:"Não consegui ler esse áudio.",
-                        ligacao_desconhecida:"A ligação expirou. Comece uma nova."}[d.erro] || d.erro); }
+    if (d.erro){
+      const texto = {
+        audio_curto_demais: "Fala muito curta — segure o botão um pouco mais.",
+        audio_ilegivel: "Não consegui ler esse áudio.",
+        audio_invalido: "Não chegou áudio nenhum.",
+        ligacao_desconhecida: "A ligação expirou. Clique em Nova ligação.",
+        cota_esgotada: "A cota diária do modelo acabou. O áudio chegou e foi " +
+                       "transcrito; foi o LLM que recusou. Tente outro modelo " +
+                       "ou espere a cota virar.",
+        provedor_falhou: "O provedor do modelo falhou.",
+        falha_interna: "Erro no servidor.",
+      }[d.erro] || d.erro;
+      falha(texto + (d.detalhe ? `  [${d.detalhe.slice(0, 120)}]` : ""));
+    }
     else {
       falha("");
       escreve("paciente", d.transcricao || "(sem fala reconhecida)");

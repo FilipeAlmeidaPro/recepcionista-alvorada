@@ -34,7 +34,7 @@ from pathlib import Path
 
 from clinica import db, retencao
 from clinica.agente import CLINICA, Agente
-from clinica.provedor import provedor_padrao
+from clinica.provedor import CotaDiariaEsgotada, provedor_padrao
 from clinica.voz import TAXA, SinteseMacOS, TranscricaoGroq, duracao
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -88,11 +88,25 @@ class Ligacao(BaseHTTPRequestHandler):
         self._responder(404, b"nao encontrado", "text/plain")
 
     def do_POST(self):
-        if self.path.startswith("/nova"):
-            return self._nova()
-        if self.path.startswith("/turno"):
-            return self._turno()
-        self._responder(404, b"nao encontrado", "text/plain")
+        # Sem este try, qualquer exceção não tratada devolvia corpo VAZIO: o
+        # navegador não conseguia nem dizer o que houve, e a demo parecia
+        # "não interpretar nada" quando na verdade a cota tinha acabado.
+        try:
+            if self.path.startswith("/nova"):
+                return self._nova()
+            if self.path.startswith("/turno"):
+                return self._turno()
+            return self._responder(404, b"nao encontrado", "text/plain")
+        except CotaDiariaEsgotada as e:
+            print(f"[cota] {e}", file=sys.stderr, flush=True)
+            return self._json({"erro": "cota_esgotada", "detalhe": str(e)[:200]}, 503)
+        except RuntimeError as e:
+            print(f"[provedor] {e}", file=sys.stderr, flush=True)
+            return self._json({"erro": "provedor_falhou", "detalhe": str(e)[:200]}, 502)
+        except Exception as e:      # noqa: BLE001
+            print(f"[erro] {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+            return self._json({"erro": "falha_interna",
+                               "detalhe": f"{type(e).__name__}: {str(e)[:160]}"}, 500)
 
     def _nova(self):
         ligacao_id = f"web-{uuid.uuid4().hex[:8]}"
@@ -198,13 +212,16 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Demo da recepcionista no navegador.")
     p.add_argument("--porta", type=int, default=8800)
     p.add_argument("--voz", default="Luciana")
+    p.add_argument("--modelo", help="modelo do orquestrador (padrão: o do perfil)")
+    p.add_argument("--provedor", choices=("groq", "gemini"),
+                   help="qual provedor usar (padrão: groq, se houver chave)")
     p.add_argument("--banco", default=None, help="caminho do banco (padrão: data/clinica.db)")
     p.add_argument("--https", action="store_true",
                    help="sobe em HTTPS com certificado autoassinado — o Safari "
                         "só libera o microfone assim")
     args = p.parse_args()
 
-    provedor = provedor_padrao()
+    provedor = provedor_padrao(modelo=args.modelo, perfil=args.provedor)
     if provedor is None:
         print("Sem chave de LLM.\n\n"
               "  cp exemplo.env .env      e preencha GROQ_API_KEY\n"

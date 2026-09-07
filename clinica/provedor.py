@@ -310,11 +310,19 @@ class ProvedorOpenAICompativel:
                         latencia_ms=latencia, bruto=escolha)
 
 
-def provedor_padrao() -> Provedor | None:
+# Groq primeiro por latência (804 ms contra 2 600 ms do Gemini no melhor dia).
+# Sem esta ordem explícita, quem tivesse as duas chaves cairia no mais lento
+# por acidente de ordem de dicionário.
+PREFERENCIA = ("groq", "gemini")
+
+
+def provedor_padrao(modelo: str | None = None,
+                    perfil: str | None = None) -> Provedor | None:
     """O provedor que houver chave para. `None` quando não há nenhuma — e aí a
     suíte roda roteirizada em vez de falhar."""
     _garantir_env()
-    for perfil, (_url, _modelo, env, _tpm) in PERFIS.items():
-        if os.environ.get(env):
-            return ProvedorOpenAICompativel(perfil)
+    ordem = (perfil,) if perfil else PREFERENCIA
+    for nome in ordem:
+        if os.environ.get(PERFIS[nome][2]):
+            return ProvedorOpenAICompativel(nome, modelo=modelo)
     return None
