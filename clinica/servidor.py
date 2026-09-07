@@ -97,8 +97,10 @@ class Ligacao(BaseHTTPRequestHandler):
         ligacao_id = f"web-{uuid.uuid4().hex[:8]}"
         agora = datetime.now()
         with _trava:
+            conn = db.conectar(self.servidor_voz.get("banco"))
+            db.criar_schema(conn)      # tabela nova em banco antigo
             _ligacoes[ligacao_id] = Agente(
-                db.conectar(), self.servidor_voz["provedor"],
+                conn, self.servidor_voz["provedor"],
                 ligacao_id=ligacao_id, agora=agora, hoje=agora.date())
         abertura = ("Clínica Alvorada, boa noite. Esta chamada é gravada. "
                     "Em que posso ajudar?")
@@ -141,8 +143,11 @@ class Ligacao(BaseHTTPRequestHandler):
         # depois — sem registro, "retenção definida" não passa de intenção.
         try:
             retencao.registrar(agente.conn, resultado)
-        except Exception:      # noqa: BLE001 — registro não pode derrubar a ligação
-            pass
+        except Exception as e:   # noqa: BLE001 — não pode derrubar a ligação
+            # Mas também não pode sumir: um registro que falha em silêncio faz
+            # a política de retenção virar teatro, porque não sobra o que apagar.
+            print(f"[retenção] falhou ao registrar {agente.ligacao_id}: {e}",
+                  file=sys.stderr, flush=True)
         self._json({
             "transcricao": t.texto,
             "fala": turno.fala_agente,
@@ -172,6 +177,7 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Demo da recepcionista no navegador.")
     p.add_argument("--porta", type=int, default=8800)
     p.add_argument("--voz", default="Luciana")
+    p.add_argument("--banco", default=None, help="caminho do banco (padrão: data/clinica.db)")
     args = p.parse_args()
 
     provedor = provedor_padrao()
@@ -183,7 +189,7 @@ def main() -> int:
         return 2
     try:
         Ligacao.servidor_voz = {"provedor": provedor, "tts": SinteseMacOS(args.voz),
-                                "stt": TranscricaoGroq()}
+                                "stt": TranscricaoGroq(), "banco": args.banco}
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2

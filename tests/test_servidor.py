@@ -8,6 +8,7 @@ O microfone e a permissão são do usuário; o resto é nosso.
 from __future__ import annotations
 
 import json
+import random
 import threading
 import unittest
 import urllib.error
@@ -18,9 +19,11 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from clinica import servidor
+from clinica import db, servidor
 from clinica.provedor import ChamadaTool, ProvedorRoteirizado, Resposta
+from clinica.seed import semear
 from clinica.voz import TAXA, Audio, Transcricao
+from tests.base import DATA_BASE
 
 
 def _wav_silencioso(caminho: Path, segundos: float = 1.0) -> Path:
@@ -64,10 +67,19 @@ class BaseServidor(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         pasta = Path(self.tmp.name)
 
+        # Banco temporário: sem isto os testes escreviam no data/clinica.db
+        # de verdade, e o "3 ligações guardadas" de um clone limpo era eu.
+        self.banco = pasta / "teste.db"
+        conn = db.conectar(self.banco)
+        db.criar_schema(conn)
+        semear(conn, DATA_BASE, random.Random(7))
+        conn.close()
+
         servidor.Ligacao.servidor_voz = {
             "provedor": ProvedorRoteirizado(self.ROTEIRO * 8),
             "tts": TTSFalso(pasta),
             "stt": STTFalso(),
+            "banco": self.banco,
         }
         servidor._ligacoes.clear()
 
@@ -175,6 +187,28 @@ class TestTurno(BaseServidor):
                                     cabecalhos={"X-Ligacao": ligacao}, metodo="POST")
         self.assertEqual(codigo, 400)
         self.assertEqual(json.loads(corpo)["erro"], "audio_ilegivel")
+
+
+class TestPersistencia(BaseServidor):
+    def test_a_ligacao_fica_guardada_para_a_retencao_agir(self):
+        """Política de retenção sem registro é teatro: não sobra o que apagar."""
+        ligacao = self._abrir()
+        self._pedir("/turno", dados=self.audio,
+                    cabecalhos={"X-Ligacao": ligacao}, metodo="POST")
+        conn = db.conectar(self.banco)
+        linha = conn.execute("SELECT * FROM ligacoes WHERE id = ?",
+                             (ligacao,)).fetchone()
+        conn.close()
+        self.assertIsNotNone(linha)
+        self.assertTrue(linha["motivo_contato"])
+
+    def test_nao_escreve_no_banco_de_producao(self):
+        from clinica.db import CAMINHO_BANCO
+        self.assertNotEqual(str(self.banco), str(CAMINHO_BANCO))
+        ligacao = self._abrir()
+        self._pedir("/turno", dados=self.audio,
+                    cabecalhos={"X-Ligacao": ligacao}, metodo="POST")
+        self.assertIn(str(self.tmp.name), str(self.banco))
 
 
 class TestTraceDoValidador(BaseServidor):
