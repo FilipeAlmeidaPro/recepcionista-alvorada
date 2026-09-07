@@ -122,6 +122,34 @@ class TestPreempcao(BaseSupervisor):
         ultima = [m for m in s.agente.mensagens if m.get("role") == "assistant"][-1]
         self.assertIn("pessoa da equipe", ultima["content"])
 
+    def test_a_fala_da_escalacao_nao_e_improvisada_pelo_modelo(self):
+        """A frase mais importante do sistema é escrita em código."""
+        s = self.montar(roteiro_agente=self.ROTEIRO_OFERTA,
+                        roteiro_guardiao=[self.viu_risco()])
+        t = s.dizer("dor no peito")
+        self.assertEqual(t.turno.fala_agente, Supervisor.FALA_ESCALACAO)
+
+    def test_o_campo_que_a_R8_le_acompanha_o_que_foi_dito(self):
+        """`ultima_fala_agente` é o que a R8 compara contra o slot. Deixá-lo
+        com a frase antiga planta exatamente a divergência que a R8 existe
+        para pegar — e ainda por cima na camada de segurança."""
+        s = self.montar(roteiro_agente=self.ROTEIRO_OFERTA,
+                        roteiro_guardiao=[self.viu_risco()])
+        t = s.dizer("pode ser terça, e ando com dor no peito")
+        self.assertEqual(s.agente.ultima_fala_agente, t.turno.fala_agente)
+        self.assertNotIn("18h", s.agente.ultima_fala_agente)
+
+    def test_tres_registros_do_turno_concordam(self):
+        s = self.montar(roteiro_agente=self.ROTEIRO_OFERTA,
+                        roteiro_guardiao=[self.viu_risco()])
+        t = s.dizer("dor no peito")
+        historico = [m["content"] for m in s.agente.mensagens
+                     if m.get("role") == "assistant"][-1]
+        self.assertEqual(t.turno.fala_agente, historico)
+        self.assertEqual(t.turno.fala_agente, s.agente.ultima_fala_agente)
+        self.assertEqual(s.agente.resultado()["transcricao"][-1]["texto"],
+                         t.turno.fala_agente)
+
     def test_sem_risco_nao_mexe_em_nada(self):
         s = self.montar(roteiro_agente=self.ROTEIRO_OFERTA,
                         roteiro_guardiao=[self.nao_viu()])

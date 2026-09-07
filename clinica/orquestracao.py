@@ -216,6 +216,12 @@ class Supervisor:
         self.turnos.append(saida)
         return saida
 
+    # A frase da escalação é escrita AQUI, em código, e não pelo modelo. É a
+    # fala mais importante que este sistema produz, e improvisá-la seria a
+    # única vez em que valeria a pena arriscar uma alucinação — não vale.
+    FALA_ESCALACAO = ("Entendi. Vou te passar agora para uma pessoa da equipe, "
+                      "um instante.")
+
     def _preemptar(self, saida: TurnoSupervisionado) -> None:
         """Segurança ganha da conversa. O que o orquestrador ia dizer não vale."""
         if self.agente.transferencia is not None:
@@ -229,15 +235,20 @@ class Supervisor:
             return
         self.agente.transferencia = r
         saida.preemptado = True
-        saida.turno.fala_agente = ("Entendi. Vou te passar agora para uma pessoa "
-                                   "da equipe, um instante.")
+        saida.turno.fala_agente = self.FALA_ESCALACAO
         saida.turno.eventos.append(
             {"ferramenta": "transferir_para_humano", "argumentos":
              {"motivo": "risco_clinico", "origem": "guardiao"}, "resultado": r})
-        # O histórico do modelo precisa saber que a ligação mudou de rumo, ou
-        # ele continua oferecendo horário no turno seguinte.
+        # Três coisas precisam concordar com o que foi dito de verdade, e
+        # esquecer qualquer uma delas cria uma mentira em algum lugar:
+        #   1. o histórico do modelo, ou ele volta a oferecer horário;
+        #   2. `ultima_fala_agente`, que é o campo que a R8 lê para conferir
+        #      confirmação verbal — deixá-lo velho é plantar exatamente o tipo
+        #      de divergência que a R8 existe para pegar;
+        #   3. o turno, que vai para o trace e para o painel.
         self.agente.mensagens.append(
             {"role": "assistant", "content": saida.turno.fala_agente})
+        self.agente.ultima_fala_agente = saida.turno.fala_agente
 
     def encerrar(self) -> dict:
         """Fecha a ligação e chama o escriba — depois, nunca durante."""
