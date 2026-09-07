@@ -452,6 +452,10 @@ async function enviar(){
         falha_interna: "Erro no servidor.",
       }[d.erro] || d.erro;
       falha(texto + (d.detalhe ? `  [${d.detalhe.slice(0, 120)}]` : ""));
+      // Turno que falhou não pode deixar o painel mostrando o trace do turno
+      // anterior: quem lê acha que aquilo aconteceu agora.
+      $("#estagios").innerHTML = `<p class="apagado">o último turno falhou</p>`;
+      $("#trace").innerHTML = `<p class="apagado">o último turno falhou</p>`;
     }
     else {
       falha("");

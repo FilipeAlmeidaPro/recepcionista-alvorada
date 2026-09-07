@@ -119,6 +119,14 @@ class Ligacao(BaseHTTPRequestHandler):
                 ligacao_id=ligacao_id, agora=agora, hoje=agora.date())
         abertura = (f"{CLINICA}, {db.saudacao(agora).lower()}. Esta chamada é "
                     f"gravada. Em que posso ajudar?")
+        # A abertura é falada pelo servidor, mas o modelo precisa saber que ela
+        # aconteceu — senão ele cumprimenta de novo e repete o aviso de
+        # gravação no primeiro turno. Também é o que a R8 lê como "a última
+        # coisa que o agente disse".
+        with _trava:
+            agente = _ligacoes[ligacao_id]
+        agente.mensagens.append({"role": "assistant", "content": abertura})
+        agente.ultima_fala_agente = abertura
         audio = self.servidor_voz["tts"].falar(
             abertura, Path(tempfile.gettempdir()) / f"{ligacao_id}-abertura.wav")
         self._json({"ligacao": ligacao_id, "fala": abertura,

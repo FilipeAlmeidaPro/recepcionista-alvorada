@@ -133,6 +133,23 @@ class TestRotas(BaseServidor):
         self.assertEqual(len(servidor._ligacoes), 2)
 
 
+class TestAbertura(BaseServidor):
+    def test_a_abertura_entra_no_historico_do_modelo(self):
+        """Sem isto o modelo cumprimenta de novo e repete o aviso de gravação
+        no primeiro turno — apareceu na primeira ligação real."""
+        ligacao = self._abrir()
+        agente = servidor._ligacoes[ligacao]
+        assistente = [m["content"] for m in agente.mensagens
+                      if m.get("role") == "assistant"]
+        self.assertEqual(len(assistente), 1)
+        self.assertIn("gravada", assistente[0])
+        self.assertEqual(agente.ultima_fala_agente, assistente[0])
+
+    def test_a_abertura_conta_como_a_ultima_fala_para_a_R8(self):
+        ligacao = self._abrir()
+        self.assertIn("Alvorada", servidor._ligacoes[ligacao].ultima_fala_agente)
+
+
 class TestTurno(BaseServidor):
     def test_turno_completo_devolve_trace(self):
         ligacao = self._abrir()

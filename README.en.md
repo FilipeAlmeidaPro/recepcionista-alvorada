@@ -482,6 +482,13 @@ p95 2,543 ms** — discarding 27 turns polluted by rate-limit waiting. With them
 included the p95 jumps to 57,605 ms, which isn't inference latency and would be
 dishonest to report as such.
 
+
+> **First call with a real human voice**, measured in the browser:
+> STT **1,688 ms** + orchestrator **1,056 ms** + TTS **508 ms** = **3,251 ms**.
+> STT is double what I measured with synthesised speech (785 ms) — a human voice
+> is longer and more hesitant than `say`, and Whisper charges by audio second.
+> **Every latency measurement I made with synthetic TTS was underestimating STT.**
+
 **The write gate costs nothing.** The bottleneck is batch STT — Groq's Whisper
 doesn't stream, so you segment with VAD and send the chunk. Paid streaming STT
 removes it; nothing else does.

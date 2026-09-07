@@ -471,6 +471,13 @@ p95 2 543 ms** — descartando 27 turnos contaminados por espera de rate limit.
 Com eles, o p95 vai a 57 605 ms, que não é latência de inferência e seria
 desonesto reportar como se fosse.
 
+
+> **Primeira ligação com voz humana de verdade**, medida no navegador:
+> STT **1 688 ms** + orquestrador **1 056 ms** + TTS **508 ms** = **3 251 ms**.
+> O STT é o dobro do que eu media com fala sintetizada (785 ms) — voz humana é
+> mais longa e mais hesitante que a do `say`, e o Whisper cobra por segundo de
+> áudio. **Toda medição minha de latência com TTS sintético subestimava o STT.**
+
 **O portão de escrita não custa nada.** O gargalo é o STT em lote — o Whisper
 da Groq não faz streaming, então segmenta-se com VAD e manda o trecho. Com STT
 em streaming pago isso cai; sem ele, não.
