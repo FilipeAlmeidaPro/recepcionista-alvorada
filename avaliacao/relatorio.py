@@ -18,6 +18,19 @@ def _percentil(valores: list[float], p: float) -> float:
     return ordenados[i]
 
 
+def _recuperacao(resultados: list[ResultadoCenario]) -> dict:
+    """Taxa de recuperação: dos cenários em que algo dá errado no meio da
+    conversa — hesitação, silêncio, interrupção, recusa —, quantos ainda
+    terminam a tarefa. O plano prometia esta métrica; é ela que separa um
+    agente que conduz de um que só funciona no caminho feliz."""
+    alvo = [r for r in resultados if r.cenario.exige_recuperacao]
+    if not alvo:
+        return {"cenarios": 0, "recuperou": 0, "taxa": None}
+    recuperou = sum(r.passou for r in alvo)
+    return {"cenarios": len(alvo), "recuperou": recuperou,
+            "taxa": recuperou / len(alvo)}
+
+
 def resumo(resultados: list[ResultadoCenario]) -> dict:
     total = len(resultados)
     passou = sum(r.passou for r in resultados)
@@ -44,6 +57,10 @@ def resumo(resultados: list[ResultadoCenario]) -> dict:
         "transferencias": dict(Counter(
             r.resultado.get("motivo_transferencia") for r in resultados
             if r.resultado.get("transferiu"))),
+        "motivos_de_contato": dict(Counter(
+            r.resultado.get("motivo_contato") for r in resultados
+            if r.resultado.get("motivo_contato"))),
+        "recuperacao": _recuperacao(resultados),
         "turnos_media": round(statistics.mean(
             [r.turnos for r in resultados]) if resultados else 0, 1),
         "latencia_p50_ms": round(_percentil(latencias, 0.50), 1),
@@ -83,6 +100,16 @@ def metricas(resultados: list[ResultadoCenario]) -> str:
         linhas.append("bloqueios do validador")
         for regra, n in sorted(s["bloqueios"].items(), key=lambda x: -x[1]):
             linhas.append(f"  {regra:<20} {n}")
+    rec = s["recuperacao"]
+    if rec["taxa"] is not None:
+        linhas.append(f"recuperação                {rec['recuperou']}/"
+                      f"{rec['cenarios']}  ({rec['taxa']:.0%}) — hesitação, "
+                      f"silêncio, interrupção, recusa")
+    if s["motivos_de_contato"]:
+        linhas.append("")
+        linhas.append("motivos de contato")
+        for motivo, n in sorted(s["motivos_de_contato"].items(), key=lambda x: -x[1]):
+            linhas.append(f"  {str(motivo):<34} {n}")
     if s["transferencias"]:
         linhas.append("")
         linhas.append("transferências para humano")

@@ -16,6 +16,7 @@ import html
 from datetime import datetime
 
 from avaliacao import relatorio
+from clinica import retencao
 from avaliacao.runner import ResultadoCenario
 
 VERDE = "#4ade80"
@@ -122,6 +123,13 @@ def _ligacao(r: ResultadoCenario) -> str:
         linhas.append(f'<div class="fala {papel}"><div class="quem">{_e(papel)}</div>'
                       f"<div>{_e(t['texto'])}</div></div>")
 
+    desfecho = ("agendou" if res.get("agendou")
+                else f"transferiu · {res.get('motivo_transferencia')}"
+                if res.get("transferiu") else "sem desfecho")
+    linhas.append(f'<p class="sub" style="margin:10px 0 2px">desfecho: '
+                  f'<b style="color:var(--tinta)">{_e(desfecho)}</b>'
+                  f' · motivo do contato: {_e(res.get("motivo_contato", "—"))}</p>')
+
     chips = "".join(f'<span class="chip">{_e(f)}</span>'
                     for f in res.get("ferramentas", []))
     chips += "".join(f'<span class="chip bloq">bloqueado: {_e(b)}</span>'
@@ -178,6 +186,20 @@ def gerar(resultados: list[ResultadoCenario], caminho: str, *,
         partes.append(_barra(familia, v["taxa"], 1.0,
                              f"{v['passou']}/{v['total']}", ruim=v["taxa"] < 0.7))
 
+    rec = s["recuperacao"]
+    if rec["taxa"] is not None:
+        partes.append("<h2>recuperação — quando algo dá errado no meio</h2>")
+        partes.append(_barra("hesitação, silêncio, interrupção, recusa",
+                             rec["taxa"], 1.0,
+                             f"{rec['recuperou']}/{rec['cenarios']}",
+                             ruim=rec["taxa"] < 0.7))
+
+    if s["motivos_de_contato"]:
+        partes.append("<h2>motivos de contato</h2>")
+        pico = max(s["motivos_de_contato"].values())
+        for motivo, n in sorted(s["motivos_de_contato"].items(), key=lambda x: -x[1]):
+            partes.append(_barra(motivo, n, pico, str(n)))
+
     if s["bloqueios"]:
         partes.append("<h2>o que o validador bloqueou</h2>")
         pico = max(s["bloqueios"].values())
@@ -194,9 +216,13 @@ def gerar(resultados: list[ResultadoCenario], caminho: str, *,
     partes.append("<h2>ligação a ligação</h2>")
     partes += [_ligacao(r) for r in resultados]
 
+    politica = retencao.politica()
     partes.append('<div class="rodape">Transcrições mascaradas: CPF e telefone '
-                  "ditados não aparecem aqui, em dígito nem por extenso (LGPD). "
-                  "Cores de status validadas para deuteranopia — nenhum estado é "
+                  "ditados não aparecem aqui, em dígito nem por extenso. "
+                  f"Retenção: transcrição {politica['transcricao_dias']} dias, "
+                  f"metadados operacionais {politica['metadados_dias']} dias — "
+                  "<code>python3 -m clinica.retencao</code> aplica. "
+                  "Cores de status validadas para deuteranopia; nenhum estado é "
                   "comunicado só por cor.</div></div>")
 
     saida = "\n".join(partes)

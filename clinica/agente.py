@@ -299,9 +299,33 @@ class Agente:
 
     # --- leitura do resultado da ligação ---
 
+    def motivo_contato(self) -> str:
+        """Para que a pessoa ligou, lido do que aconteceu — não do que ela disse.
+
+        O agregado do painel precisa disto e o plano pedia; derivar do trace é
+        mais confiável que pedir ao modelo para se autoclassificar.
+        """
+        if self.transferencia:
+            return f"transferência: {self.transferencia['motivo']}"
+        especialidades = [e["argumentos"].get("especialidade")
+                          for t in self.turnos for e in t.eventos
+                          if e["ferramenta"] == "consultar_agenda"]
+        especialidade = next((x for x in reversed(especialidades) if x), None)
+        if self.agendamento_id and especialidade:
+            return f"agendamento: {especialidade}"
+        if self.agendamento_id:
+            return "agendamento"
+        if especialidade:
+            return f"consulta de agenda: {especialidade}"
+        if self.paciente_id:
+            return "identificação sem desfecho"
+        return "não identificado"
+
     def resultado(self) -> dict:
         return {
             "ligacao_id": self.ligacao_id,
+            "paciente_id": self.paciente_id,
+            "motivo_contato": self.motivo_contato(),
             "agendou": self.agendamento_id is not None,
             "agendamento_id": self.agendamento_id,
             "transferiu": self.transferencia is not None,

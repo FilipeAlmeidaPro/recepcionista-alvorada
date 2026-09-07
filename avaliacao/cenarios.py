@@ -62,6 +62,7 @@ class Cenario:
     personalidade: str = PADRAO
     objetivo: str = ""
     continuacao: tuple[str, ...] = CONTINUACAO
+    exige_recuperacao: bool = False   # algo dá errado no meio e o agente reage
 
     def objetivo_do_paciente(self) -> str:
         return self.objetivo or self.titulo
@@ -386,7 +387,16 @@ CENARIOS: list[Cenario] = [
 # Cenário que deve terminar sem agendamento não ganha fala de continuação:
 # o roteiro acaba e a ligação acaba junto.
 SEM_CONTINUACAO = {"A2", "B1", "B4", "B5", "B6", "B7", "C1", "C6"}
-CENARIOS = [replace(c, continuacao=()) if c.id in SEM_CONTINUACAO else c
+
+# Cenários em que algo dá errado no meio da conversa — o paciente hesita, se
+# corrige, se cala, interrompe, muda de ideia ou sai do assunto. A taxa de
+# sucesso aqui é o que separa um agente que conduz de um que só funciona no
+# caminho feliz. O plano chamava isso de "taxa de recuperação".
+EXIGE_RECUPERACAO = {"C3", "C5", "C7", "D1", "D3", "D5", "D6",
+                     "E2", "E3", "E4", "E5", "E6", "F1", "F2", "F4", "F6"}
+
+CENARIOS = [replace(c, continuacao=() if c.id in SEM_CONTINUACAO else c.continuacao,
+                    exige_recuperacao=c.id in EXIGE_RECUPERACAO)
             for c in CENARIOS]
 
 FAMILIAS = {c.familia for c in CENARIOS}

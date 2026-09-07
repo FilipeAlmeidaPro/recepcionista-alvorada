@@ -68,6 +68,22 @@ CREATE TABLE IF NOT EXISTS agendamentos (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_um_confirmado_por_slot
     ON agendamentos(slot_id) WHERE status = 'confirmado';
 
+-- Ligações encerradas. A transcrição aqui já vem mascarada, e tem prazo de
+-- validade: ver clinica/retencao.py. Dado pessoal guardado sem prazo definido
+-- é dado guardado por descuido.
+CREATE TABLE IF NOT EXISTS ligacoes (
+    id              TEXT PRIMARY KEY,
+    criado_em       TEXT NOT NULL,
+    paciente_id     INTEGER REFERENCES pacientes(id),
+    agendamento_id  INTEGER REFERENCES agendamentos(id),
+    motivo_contato  TEXT,
+    transferencia   TEXT,
+    turnos          INTEGER NOT NULL DEFAULT 0,
+    transcricao     TEXT NOT NULL,
+    trace           TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ligacoes_data ON ligacoes(criado_em);
+
 CREATE TABLE IF NOT EXISTS transferencias (
     id           INTEGER PRIMARY KEY,
     motivo       TEXT NOT NULL CHECK (motivo IN

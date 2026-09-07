@@ -31,7 +31,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from clinica import db
+from clinica import db, retencao
 from clinica.agente import Agente
 from clinica.provedor import provedor_padrao
 from clinica.voz import TAXA, SinteseMacOS, TranscricaoGroq, duracao
@@ -137,6 +137,12 @@ class Ligacao(BaseHTTPRequestHandler):
             audio_b64 = base64.b64encode(saida.read_bytes()).decode()
 
         resultado = agente.resultado()
+        # Grava a ligação. É o que dá à política de retenção algo para apagar
+        # depois — sem registro, "retenção definida" não passa de intenção.
+        try:
+            retencao.registrar(agente.conn, resultado)
+        except Exception:      # noqa: BLE001 — registro não pode derrubar a ligação
+            pass
         self._json({
             "transcricao": t.texto,
             "fala": turno.fala_agente,

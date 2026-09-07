@@ -32,7 +32,7 @@ things with reliability numbers attached beats one that does twelve with none.
 ```bash
 git clone <this-repo> && cd alvorada-receptionist
 python3 -m clinica.seed --data-base 2026-09-03   # builds data/clinica.db
-python3 -m unittest discover -s . -t .           # 180 tests
+python3 -m unittest discover -s . -t .           # 190 tests
 python3 -m avaliacao --provedor simulado         # 40 scenarios, no LLM, US$ 0
 ```
 
@@ -204,6 +204,28 @@ Masking the database column isn't enough — the number shows up raw in speech.
 
 Ordinary speech with short numbers (`"pode ser às 18h30"`) is left alone.
 
+### Retention: deleting is the hard part
+
+Recording a call is easy. What the law asks for is **deletion**, and personal
+data kept without a defined window is data kept by neglect.
+
+| layer | window | why |
+|---|---:|---|
+| **transcript** | **90 days** | where the health data lives — "chest pain" identifies more than an ID number |
+| operational metadata | 730 days | when they called, whether it booked, contact reason; runs the operation |
+| the appointment itself | untouched | separate record, separate legal basis |
+
+What identifies goes; what manages stays.
+
+```bash
+python3 -m clinica.retencao --simular   # shows what would go
+python3 -m clinica.retencao             # applies it
+```
+
+Ten tests cover this, including idempotency and the guarantee that purging
+never touches an appointment.
+
+
 ---
 
 ## The numbers
@@ -229,6 +251,13 @@ survive.
 models, because the daily quota doesn't fit 40 in one go — which is why I
 **don't add the two numbers up**. 24/28 and 8/12 measure different models;
 writing "32/40" would invent a run that never happened.
+
+Beyond task completion, the suite reports a **recovery rate**: of the 16
+scenarios where something goes wrong mid-conversation — the caller hesitates,
+corrects themselves, goes quiet, interrupts, changes their mind or drifts off
+topic — how many still finish the task. That's what separates an agent that
+leads a conversation from one that only works on the happy path. The
+deterministic baseline scores **14/16 (88%)**.
 
 By family, on `gpt-oss-120b`:
 
@@ -441,6 +470,7 @@ clinica/
   ligar.py         end-to-end call CLI
   servidor.py      browser demo (stdlib http.server)
   vad.py           energy-based speech detection with an adaptive floor
+  retencao.py      transcript retention policy, with a CLI
 
 web/index.html     the page: push-to-talk and the live trace
 
@@ -454,10 +484,10 @@ avaliacao/
   painel.py        HTML panel
   relatorio.py     aggregate metrics
 
-tests/             180 tests, stdlib
+tests/             190 tests, stdlib
 ```
 
-**22 modules, 6,512 lines.** Database: 4 specialties, 6 professionals,
+**23 modules, 6,911 lines.** Database: 4 specialties, 6 professionals,
 40 patients, 819 slots across 3 weeks.
 
 Scarcity in the seed is designed, not random: **only Dra. Thaís Bittencourt

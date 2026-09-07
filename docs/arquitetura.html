@@ -123,11 +123,11 @@
   português do Brasil. A tese é uma frase: <strong>o modelo propõe, o código
   escreve.</strong></p>
   <div class="chips">
-    <span class="chip"><b>136</b> testes</span>
-    <span class="chip"><b>0</b> dependências</span>
+    <span class="chip"><b>190</b> testes</span>
     <span class="chip"><b>10</b> regras de validação</span>
     <span class="chip"><b>40</b> cenários de eval</span>
-    <span class="chip"><b>5 544</b> linhas</span>
+    <span class="chip"><b>0</b> dependências</span>
+    <span class="chip"><b>6 911</b> linhas</span>
   </div>
 </header>
 
@@ -459,6 +459,9 @@ a vaga para o próximo da fila.</figcaption>
   <tr><th>achado</th><th>quem pegou</th></tr>
   <tr><td><code>"boa noite"</code> virava restrição de horário 18h–21h — na primeira frase de toda ligação</td><td>testes de unidade</td></tr>
   <tr><td>o agente transferia por dor no peito <strong>e seguia oferecendo horário</strong> no mesmo turno</td><td>o painel renderizado</td></tr>
+  <tr><td><strong>o modelo inventou um preço</strong> — "R$ 200,00" e "aceitamos Unimed", sem nenhum dado por trás</td><td>rodar contra o provedor real</td></tr>
+  <tr><td>a fixture ditava telefone sem DDD; o agente reclamava, com razão, que "esse CPF tem só nove números"</td><td>rodar contra o provedor real</td></tr>
+  <tr><td>o rótulo de <code>frustracao</code> em F5 estava errado — dois modelos leram "quero falar com uma pessoa" como pedido, e estavam certos</td><td>rodar contra o provedor real</td></tr>
   <tr><td>schema de tool sem <code>null</code>: a Groq valida no servidor e recusava 6 cenários</td><td>rodar contra o provedor real</td></tr>
   <tr><td>Gemini 3.x recusa a chamada se o <code>thought_signature</code> não voltar no histórico</td><td>rodar contra o provedor real</td></tr>
   <tr><td>o modelo responde em markdown; o TTS leria <code>- 18h00</code> como "hífen dezoito"</td><td>rodar contra o provedor real</td></tr>
@@ -475,6 +478,67 @@ a vaga para o próximo da fila.</figcaption>
   escalado — dá ao paciente a impressão de que a máquina ainda cuida dele.</p>
   <p>Só dava para ver <em>olhando</em> a ligação renderizada. Suíte verde não é
   o mesmo que comportamento certo.</p>
+</div>
+
+<h2>O limite do portão</h2>
+<div class="prosa">
+  <p>O validador guarda a <strong>escrita</strong>. Não guarda a <strong>fala</strong>
+  — e a rodada contra a Groq mostrou exatamente onde isso dói:</p>
+</div>
+
+<pre>paciente: Oi, quanto custa a consulta de ortopedia?
+  agente: <span class="b">A consulta de ortopedia tem o valor de R$ 200,00.</span>
+paciente: E vocês aceitam Unimed?
+  agente: <span class="b">Sim, aceitamos Unimed.</span></pre>
+
+<div class="prosa">
+  <p>O sistema não tem tabela de preço, não tem dado de convênio, não tem
+  ferramenta para nenhum dos dois. Duas invenções, ditas com a confiança de um
+  dado real, <strong>sem chamar ferramenta nenhuma</strong> — e por isso o
+  validador nunca foi acionado.</p>
+  <p>Contra alucinação falada só existe asserção de eval. Foi ela que pegou.
+  <strong>É o argumento a favor de ter as duas camadas</strong>: o portão
+  garante que o banco não recebe lixo; a suíte é o que descobre que a boca
+  inventou.</p>
+</div>
+
+<h2>A conversa não sai do caminho feliz sozinha</h2>
+<div class="prosa">
+  <p>Dezesseis dos quarenta cenários têm algo dando errado no meio: o paciente
+  hesita, se corrige, se cala, interrompe, muda de ideia ou sai do assunto.
+  A <strong>taxa de recuperação</strong> mede quantos ainda terminam a tarefa —
+  e é ela que separa um agente que conduz de um que só funciona quando tudo
+  vai bem.</p>
+</div>
+<div class="tabela">
+<table>
+  <tr><th>métrica</th><th class="n">baseline de regras</th></tr>
+  <tr><td>conclusão da tarefa</td><td class="n forte">37/40 · 92%</td></tr>
+  <tr><td>recuperação (hesitação, silêncio, interrupção, recusa)</td><td class="n forte">14/16 · 88%</td></tr>
+</table>
+</div>
+
+<h2>Apagar é a parte difícil</h2>
+<div class="prosa">
+  <p>Gravar a ligação é fácil. O que a LGPD cobra é <strong>apagar</strong>, e
+  dado pessoal guardado sem prazo definido é dado guardado por descuido. Aqui o
+  prazo é código com dez testes, não uma frase no README.</p>
+</div>
+<div class="tabela">
+<table>
+  <tr><th>camada</th><th class="n">prazo</th><th>por quê</th></tr>
+  <tr><td class="forte">transcrição</td><td class="n forte">90 dias</td>
+      <td>é onde mora o dado de saúde — "dor no peito" identifica mais que um CPF</td></tr>
+  <tr><td>metadados operacionais</td><td class="n">730 dias</td>
+      <td>quando ligou, se agendou, motivo do contato; sustenta a operação</td></tr>
+  <tr><td>o agendamento em si</td><td class="n">intocado</td>
+      <td>outro registro, outra base legal</td></tr>
+</table>
+</div>
+<div class="prosa">
+  <p>Some o que identifica, fica o que gerencia.
+  <code>python3 -m clinica.retencao</code> aplica; <code>--simular</code> mostra
+  o que sairia sem apagar nada.</p>
 </div>
 
 <h2>O que a gratuidade custou</h2>
@@ -498,10 +562,16 @@ a vaga para o próximo da fila.</figcaption>
 
 <h2>O que falta, e por quê</h2>
 <div class="prosa">
-  <p><strong>A camada que falta é o microfone e o WebRTC no navegador.</strong>
-  Tudo abaixo disso está construído e medido — <code>python3 -m clinica.ligar</code>
-  roda a ligação inteira, do áudio de entrada ao áudio de saída, com o tempo de
-  cada estágio na tela.</p>
+  <p><strong>O que falta é transcrição em streaming.</strong> Sem ela o agente
+  só começa a pensar quando o paciente termina de falar, e isso é metade da
+  sensação de lentidão. Exige STT em streaming pago — a mesma conclusão a que a
+  tabela de latência já tinha chegado por outro caminho.</p>
+  <p>O microfone, o turno automático e o <strong>barge-in já existem</strong>:
+  <code>python3 -m clinica.servidor</code> abre a demo no navegador, com VAD do
+  lado do cliente que abre e fecha o turno e cala o agente quando você fala por
+  cima. Barge-in não precisou de Pipecat — interromper é decidir quando parar de
+  tocar o áudio, e detectar turno é VAD; os dois cabem no cliente. O mesmo VAD
+  existe em Python, com quatorze testes, em <code>clinica/vad.py</code>.</p>
   <p><strong>Fora de escopo de propósito:</strong> convênios, preços, ERP,
   pagamentos, ligações ativas, funil comercial. Arquitetura desenhada para
   todos, nenhum implementado. Saber o que não entregar dentro do prazo é sinal
@@ -515,7 +585,7 @@ a vaga para o próximo da fila.</figcaption>
 <div class="rodape">
   Recepcionista Alvorada · código em
   <a href="https://github.com/FilipeAlmeidaPro/recepcionista-alvorada">github.com/FilipeAlmeidaPro/recepcionista-alvorada</a>
-  · MIT · nenhum dado real: os 40 pacientes, os CPFs com dígito verificador
+  · MIT · 190 testes, zero dependências · nenhum dado real: os 40 pacientes, os CPFs com dígito verificador
   válido e a agenda inteira são gerados por <code>Random(42)</code>.
 </div>
 </div>

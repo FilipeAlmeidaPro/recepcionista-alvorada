@@ -33,7 +33,7 @@ doze sem nenhum.
 ```bash
 git clone <este-repo> && cd recepcionista-alvorada
 python3 -m clinica.seed --data-base 2026-09-03   # gera data/clinica.db
-python3 -m unittest discover -s . -t .           # 180 testes
+python3 -m unittest discover -s . -t .           # 190 testes
 python3 -m avaliacao --provedor simulado         # 40 cenários, sem LLM, US$ 0
 ```
 
@@ -197,6 +197,28 @@ Mascarar o campo do banco não basta — o número aparece cru na fala.
 
 Fala normal com número curto (`"pode ser às 18h30"`) não é tocada.
 
+### Retenção: apagar é a parte difícil
+
+Gravar a ligação é fácil. O que a LGPD cobra é **apagar**, e dado pessoal
+guardado sem prazo definido é dado guardado por descuido.
+
+| camada | prazo | por quê |
+|---|---:|---|
+| **transcrição** | **90 dias** | é onde mora o dado de saúde — "dor no peito" identifica mais que um CPF |
+| metadados operacionais | 730 dias | quando ligou, se agendou, motivo do contato; sustenta a operação |
+| o agendamento em si | intocado | outro registro, outra base legal |
+
+Some o que identifica, fica o que gerencia.
+
+```bash
+python3 -m clinica.retencao --simular   # mostra o que sairia
+python3 -m clinica.retencao             # aplica
+```
+
+Dez testes cobrem isso, incluindo a idempotência e a garantia de que a purga
+não encosta no agendamento.
+
+
 ---
 
 ## Os números
@@ -221,6 +243,12 @@ a restrição falada. Prompt e modelo mudam; essas asserções sobrevivem.
 diferentes, porque a cota diária não comporta os 40 de uma vez — e por isso
 **não somo os dois números**. 24/28 e 8/12 medem modelos distintos; escrever
 "32/40" seria inventar uma rodada que nunca existiu.
+
+Além da taxa de conclusão, a suíte reporta a **taxa de recuperação**: dos
+16 cenários em que algo dá errado no meio — o paciente hesita, se corrige, se
+cala, interrompe, muda de ideia ou sai do assunto —, quantos ainda terminam a
+tarefa. É ela que separa um agente que conduz de um que só funciona no caminho
+feliz. O baseline determinístico faz **14/16 (88%)**.
 
 Por família, no `gpt-oss-120b`:
 
@@ -433,6 +461,7 @@ clinica/
   ligar.py         CLI de uma ligação ponta a ponta
   servidor.py      demo no navegador (http.server da stdlib)
   vad.py           detecção de fala por energia, com piso adaptativo
+  retencao.py      política de retenção de transcrição, com CLI
 
 web/index.html     a página: push-to-talk e o trace ao vivo
 
@@ -446,10 +475,10 @@ avaliacao/
   painel.py        painel HTML
   relatorio.py     métricas agregadas
 
-tests/             180 testes, stdlib
+tests/             190 testes, stdlib
 ```
 
-**22 módulos, 6 512 linhas.** Banco: 4 especialidades, 6 profissionais,
+**23 módulos, 6 911 linhas.** Banco: 4 especialidades, 6 profissionais,
 40 pacientes, 819 slots em 3 semanas.
 
 A escassez do banco é desenhada, não sorteada: **só a Dra. Thaís Bittencourt
