@@ -110,9 +110,9 @@
 <div class="wrap">
 <header class="prosa">
   <h1>Quem confere quem</h1>
-  <p class="destaque">O elenco do Voice Agent Assistant: seis agentes, quatro
-  modelos, quatro superfícies. <strong>Três dos seis usam LLM — e os outros
-  três existem para conferir esses três.</strong></p>
+  <p class="destaque">O elenco do Voice Agent Assistant: nove agentes, cinco
+  modelos, quatro superfícies. <strong>Cinco usam LLM. O supervisor que
+  coordena esses cinco não usa — é código.</strong></p>
   <div class="legenda">
     <span><i class="selo llm"></i> usa LLM · pode inventar</span>
     <span><i class="selo det"></i> determinístico · não inventa</span>
@@ -195,6 +195,75 @@ decide que o turno do paciente acabou, e é o parâmetro mais caro do sistema �
 curto demais trunca a fala e a extração de entidade cai de 90% para 60%.</figcaption>
 </figure>
 
+
+<h2>A supervisão roda ao lado, não na frente</h2>
+<div class="prosa">
+  <p>O padrão comum de multi-agente é um LLM supervisor que lê o turno e decide
+  para qual especialista mandar. Aqui isso custaria <strong>um salto de rede
+  por turno</strong> num sistema já 3,5× acima do alvo de latência — para
+  decidir o que um <code>if</code> decide melhor e em zero milissegundo.</p>
+  <p>Então o supervisor é código, e o especialista corre <strong>em
+  paralelo</strong>: enquanto for mais rápido que o orquestrador, ele não
+  aparece na conta do turno.</p>
+</div>
+
+<figure>
+<svg viewBox="0 0 900 330" role="img" aria-label="A fala do paciente vai ao mesmo tempo para o orquestrador, que leva de mil a mil e quinhentos milissegundos, e para o guardião de risco, que leva seiscentos e quinze. O supervisor, que é código, espera os dois; se o guardião viu risco, descarta a resposta do orquestrador e escala.">
+  <defs>
+    <marker id="b1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
+            markerHeight="6" orient="auto-start-reverse">
+      <path class="d-seta" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+  </defs>
+
+  <rect class="d-neutra" x="330" y="20" width="240" height="52" rx="11"/>
+  <text class="d-rot" x="348" y="42">Fala do paciente</text>
+  <text class="d-sub" x="348" y="60">um turno</text>
+
+  <path class="d-eixo" marker-end="url(#b1)" d="M400,72 L400,102 L170,102 L170,130"/>
+  <path class="d-eixo" marker-end="url(#b1)" d="M500,72 L500,102 L720,102 L720,130"/>
+  <text class="d-sub" x="450" y="96" text-anchor="middle">ao mesmo tempo</text>
+
+  <rect class="d-llm" x="40" y="132" width="260" height="86" rx="13"/>
+  <text class="d-rot" x="58" y="158">Orquestrador</text>
+  <text class="d-sub" x="58" y="176">6 ferramentas · ~3 000 tokens</text>
+  <text class="d-num-llm" x="58" y="200">1 000–1 500 ms</text>
+
+  <rect class="d-llm" x="590" y="132" width="260" height="86" rx="13"/>
+  <text class="d-rot" x="608" y="158">Guardião de risco</text>
+  <text class="d-sub" x="608" y="176">1 pergunta · ~80 tokens</text>
+  <text class="d-num-llm" x="608" y="200">615 ms · some no paralelo</text>
+
+  <path class="d-eixo" marker-end="url(#b1)" d="M170,218 L170,266 L326,266"/>
+  <path class="d-eixo" marker-end="url(#b1)" d="M720,218 L720,266 L574,266"/>
+  <text class="d-sub" x="196" y="258">resposta</text>
+  <text class="d-sub" x="694" y="258" text-anchor="end">viu risco?</text>
+
+  <rect class="d-det" x="330" y="228" width="240" height="76" rx="13"/>
+  <text class="d-rot" x="348" y="254">Supervisor</text>
+  <text class="d-sub" x="348" y="272">código · 0 ms · não pensa</text>
+  <text class="d-num-det" x="348" y="292">se viu risco, descarta e escala</text>
+</svg>
+<figcaption>O turno custa <b>o maior dos dois tempos, não a soma</b> — há um
+teste que mede exatamente isso. Quando o guardião dispara ele
+<b>preempta</b>: o que o orquestrador ia dizer é descartado e a ligação escala.
+O que ele nunca faz é o contrário — cancelar um alarme do orquestrador
+silenciaria um risco real, e é o único erro que este sistema não pode
+cometer.</figcaption>
+</figure>
+
+<div class="nota aviso">
+  <p><strong>A hipótese que justificava essa camada estava errada.</strong> Eu
+  escrevi que o orquestrador, ocupado agendando, deixaria passar um sinal
+  enterrado no meio de outra frase. Medi, e não deixa: o <code>120b</code>
+  pegou sozinho, e o <code>20b</code> pegou 4 de 4.</p>
+  <p>O que a medição mostrou é menor e verdadeiro — <strong>um classificador
+  especializado bate um generalista ocupado na precisão</strong>. O guardião
+  fez 7/7; o orquestrador barato fez 6/7, escalando uma dor no peito <em>do ano
+  passado, já investigada</em>, que o guardião corretamente recusou. Em nenhum
+  caso medido o guardião pegou algo que o orquestrador perdeu.</p>
+</div>
+
 <h2>O que já rodou, e o que não</h2>
 <div class="prosa">
   <p>A suíte é uma matriz: de um lado quem atende, do outro quem liga. Cada um
@@ -242,7 +311,7 @@ linhas de <code>if</code> tira 92%. A afirmação é plausível e <b>ainda não 
 prova</b>. Uma família de sete cenários cabe na cota de um dia.</figcaption>
 </figure>
 
-<h2>Os seis agentes</h2>
+<h2>Os nove agentes</h2>
 <div class="tabela">
 <table>
   <tr><th>agente</th><th>papel</th><th>motor</th><th class="n">tamanho</th></tr>
@@ -252,9 +321,18 @@ prova</b>. Uma família de sete cenários cabe na cota de um dia.</figcaption>
   <tr><td class="forte">Paciente sintético</td>
       <td>liga com objetivo privado e personalidade; não segue roteiro</td>
       <td><span class="tag llm">LLM</span></td><td class="n">98</td></tr>
+  <tr><td class="forte">Guardião de risco</td>
+      <td>uma pergunta por turno, em paralelo: há sinal de risco nesta frase?</td>
+      <td><span class="tag llm">LLM</span></td><td class="n">—</td></tr>
+  <tr><td class="forte">Escriba</td>
+      <td>depois da ligação: escreve o resumo para quem recebe a transferência</td>
+      <td><span class="tag llm">LLM</span></td><td class="n">—</td></tr>
   <tr><td class="forte">Extrator de entidade</td>
       <td>só no benchmark: lê a fala crua e devolve a entidade</td>
       <td><span class="tag llm">LLM</span></td><td class="n">—</td></tr>
+  <tr><td class="forte">Supervisor</td>
+      <td>coordena os especialistas; roda o guardião em paralelo e preempta</td>
+      <td><span class="tag det">código</span></td><td class="n">265</td></tr>
   <tr><td class="forte">Validador</td>
       <td>10 regras entre a proposta do modelo e o banco</td>
       <td><span class="tag det">código</span></td><td class="n">398</td></tr>
@@ -280,6 +358,8 @@ prova</b>. Uma família de sete cenários cabe na cota de um dia.</figcaption>
       <td class="n">804 ms</td><td>24/28 cenários</td></tr>
   <tr><td class="forte">groq · <code>gpt-oss-20b</code></td><td>orquestrador</td>
       <td class="n">751 ms</td><td>8/12 cenários</td></tr>
+  <tr><td class="forte">groq · <code>gpt-oss-20b</code></td><td>guardião de risco</td>
+      <td class="n">615 ms</td><td>7/7 · mais preciso que o orquestrador</td></tr>
   <tr><td>groq · <code>qwen3.8-27b</code></td><td>orquestrador</td>
       <td class="n">649 ms</td><td><span class="apagado">nunca rodou a suíte</span></td></tr>
   <tr><td class="forte">groq · <code>whisper-large-v3-turbo</code></td><td>STT</td>
@@ -324,10 +404,12 @@ prova</b>. Uma família de sete cenários cabe na cota de um dia.</figcaption>
 </div>
 
 <div class="nota">
-  <p><strong>A conta que importa: três dos seis agentes usam LLM.</strong> Os
-  outros três — validador, juiz, baseline — existem exatamente para conferir
-  esses três. Some o normalizador e o VAD, que também não inventam, e a razão
-  vira <strong>três que podem errar contra cinco que checam</strong>.</p>
+  <p><strong>A conta que importa: cinco dos nove agentes usam LLM.</strong> Os
+  outros quatro — supervisor, validador, juiz, baseline — coordenam e conferem
+  sem modelo nenhum. Some o normalizador e o VAD, e a razão fica
+  <strong>cinco que podem errar contra seis que checam</strong>.</p>
+  <p>E o mais revelador: <strong>o agente que coordena os cinco de LLM é o que
+  não usa LLM</strong>.</p>
   <p>É a mesma tese do projeto dita de outro jeito: <em>o modelo propõe, o
   código escreve</em>. O organograma é a arquitetura.</p>
 </div>
@@ -335,6 +417,6 @@ prova</b>. Uma família de sete cenários cabe na cota de um dia.</figcaption>
 <div class="rodape">
   Voice Agent Assistant ·
   <a href="https://github.com/FilipeAlmeidaPro/voice-agent-assistant">github.com/FilipeAlmeidaPro/voice-agent-assistant</a>
-  · 192 testes, zero dependências · todos os números medidos neste repositório.
+  · 210 testes, zero dependências · todos os números medidos neste repositório.
 </div>
 </div>

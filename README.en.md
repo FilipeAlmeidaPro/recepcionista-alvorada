@@ -34,7 +34,7 @@ things with reliability numbers attached beats one that does twelve with none.
 ```bash
 git clone <this-repo> && cd voice-agent-assistant
 python3 -m clinica.seed --data-base 2026-09-03   # builds data/clinica.db
-python3 -m unittest discover -s . -t .           # 190 tests
+python3 -m unittest discover -s . -t .           # 210 tests
 python3 -m avaliacao --provedor simulado         # 40 scenarios, no LLM, US$ 0
 ```
 
@@ -229,6 +229,70 @@ never touches an appointment.
 
 
 ---
+
+## Multi-agent orchestration — and what it failed to prove
+
+```
+                     ┌──────────────────────────┐
+     caller's turn ──┤  Supervisor (code)       │
+                     └───────┬──────────┬───────┘
+                             │ parallel │
+              ┌──────────────┘          └──────────────┐
+              ▼                                        ▼
+   ┌──────────────────────┐              ┌──────────────────────┐
+   │ Orchestrator         │              │ Risk guardian        │
+   │ 6 tools · ~3,000 tok │              │ 1 question · ~80 tok │
+   │ 1,000–1,500 ms       │              │ 615 ms · disappears  │
+   └──────────┬───────────┘              └──────────┬───────────┘
+              │                                     │ risk?
+              └──────────────┬──────────────────────┘
+                             ▼
+                   preempt: discard the orchestrator's
+                   reply and escalate
+```
+
+**The supervisor is code, not a model.** An LLM supervisor routing between
+sub-agents would add a network hop per turn to a system already 3.5× over its
+latency target, plus one more surface for hallucination, to decide something an
+`if` decides better.
+
+What *is* multi-agent are the **specialists**: a risk guardian running **in
+parallel** (not in front) and a scribe writing the handoff summary **after**
+the call. Neither sits on the turn's critical path.
+
+### My hypothesis was wrong
+
+I wrote that the guardian existed because "the orchestrator is busy and will
+miss a signal buried mid-sentence." I measured it
+(`python3 -m avaliacao.risco`) and **that isn't true**:
+
+| | risk signals caught | false positives |
+|---|---|---|
+| Guardian (`gpt-oss-20b`) | **4/4** | **0/3** |
+| Orchestrator (`gpt-oss-20b`) | **4/4** | 1/3 |
+| Orchestrator (`gpt-oss-120b`) | caught the buried case alone | — |
+
+**In no measured case did the guardian catch something the orchestrator
+missed.** If that were the argument, the layer wouldn't pay for itself.
+
+What the measurement did show is smaller and true: **a specialised classifier
+beats a busy generalist on precision.** The guardian scored 7/7; the cheap
+orchestrator scored 6/7 — it escalated a chest pain *from last year, already
+investigated*, which the guardian correctly declined.
+
+So the demonstrated value is: better precision, ~600 ms that vanish into the
+parallelism, ~3% of the turn's tokens. The guardian stays as a **safety floor
+independent of the orchestrator's model** — and that part is still unproven,
+because the daily quota ran out before I could test an even cheaper
+orchestrator.
+
+One thing it deliberately does **not** do: suppress an escalation. A guardian
+that cancels the orchestrator's alarm could silence a real risk, and that's the
+one error this system cannot make.
+
+**18 tests** cover the layer, including preemption, non-duplication when the
+orchestrator already escalated on its own, and proof that running in parallel
+costs the larger of the two times rather than their sum.
 
 ## The numbers
 
@@ -471,6 +535,7 @@ clinica/
   voz.py           TTS (say) and STT (Whisper), with per-stage timing
   ligar.py         end-to-end call CLI
   servidor.py      browser demo (stdlib http.server)
+  orquestracao.py  deterministic supervisor, risk guardian, scribe
   vad.py           energy-based speech detection with an adaptive floor
   retencao.py      transcript retention policy, with a CLI
 
@@ -486,10 +551,10 @@ avaliacao/
   painel.py        HTML panel
   relatorio.py     aggregate metrics
 
-tests/             190 tests, stdlib
+tests/             210 tests, stdlib
 ```
 
-**23 modules, 6,911 lines.** Database: 4 specialties, 6 professionals,
+**25 modules, 7,631 lines.** Database: 4 specialties, 6 professionals,
 40 patients, 819 slots across 3 weeks.
 
 Scarcity in the seed is designed, not random: **only Dra. Thaís Bittencourt

@@ -34,7 +34,7 @@ doze sem nenhum.
 ```bash
 git clone <este-repo> && cd voice-agent-assistant
 python3 -m clinica.seed --data-base 2026-09-03   # gera data/clinica.db
-python3 -m unittest discover -s . -t .           # 190 testes
+python3 -m unittest discover -s . -t .           # 210 testes
 python3 -m avaliacao --provedor simulado         # 40 cenários, sem LLM, US$ 0
 ```
 
@@ -221,6 +221,69 @@ não encosta no agendamento.
 
 
 ---
+
+## Orquestração multi-agente — e o que ela não provou
+
+```
+                     ┌──────────────────────────┐
+   fala do paciente ─┤  Supervisor (código)     │
+                     └───────┬──────────┬───────┘
+                             │ paralelo │
+              ┌──────────────┘          └──────────────┐
+              ▼                                        ▼
+   ┌──────────────────────┐              ┌──────────────────────┐
+   │ Orquestrador         │              │ Guardião de risco    │
+   │ 6 tools · ~3 000 tok │              │ 1 pergunta · ~80 tok │
+   │ 1 000–1 500 ms       │              │ 615 ms · some        │
+   └──────────┬───────────┘              └──────────┬───────────┘
+              │                                     │ viu risco?
+              └──────────────┬──────────────────────┘
+                             ▼
+                   preempta: descarta a resposta
+                   do orquestrador e escala
+```
+
+**O supervisor é código, não um modelo.** Um LLM supervisor roteando entre
+sub-agentes acrescentaria um salto de rede por turno num sistema que já está
+3,5× acima do alvo de latência, e mais uma superfície de alucinação, para
+decidir o que um `if` decide melhor.
+
+O que é multi-agente são os **especialistas**: um guardião de risco que roda
+**em paralelo** (não antes) e um escriba que escreve o resumo do handoff
+**depois** da ligação. Nenhum dos dois entra no caminho crítico do turno.
+
+### A hipótese que eu tinha estava errada
+
+Escrevi que o guardião existia porque "o orquestrador está ocupado e deixa
+passar sinal enterrado no meio de outra frase". Medi
+(`python3 -m avaliacao.risco`) e **não é verdade**:
+
+| | sinais de risco pegos | falsos positivos |
+|---|---|---|
+| Guardião (`gpt-oss-20b`) | **4/4** | **0/3** |
+| Orquestrador (`gpt-oss-20b`) | **4/4** | 1/3 |
+| Orquestrador (`gpt-oss-120b`) | pegou o caso enterrado sozinho | — |
+
+**Em nenhum caso medido o guardião pegou algo que o orquestrador perdeu.** Se
+o argumento fosse esse, a camada não se pagaria.
+
+O que a medição mostrou é menor e verdadeiro: **um classificador especializado
+bate um generalista ocupado na precisão.** O guardião acertou 7/7; o
+orquestrador barato acertou 6/7 — escalou uma dor no peito *do ano passado, já
+investigada*, que o guardião corretamente recusou.
+
+Então o valor demonstrado é: precisão maior, ~600 ms que somem no paralelismo,
+~3% dos tokens do turno. O guardião fica como **piso de segurança independente
+do modelo do orquestrador** — e essa parte ainda não foi provada, porque a cota
+diária acabou antes de eu testar com um orquestrador ainda mais barato.
+
+Uma coisa que ele **não** faz, de propósito: suprimir escalação. Um guardião
+que cancela o alarme do orquestrador poderia silenciar um risco real, e esse é
+o único erro que este sistema não pode cometer.
+
+**18 testes** cobrem a camada, incluindo a preempção, a não-duplicação quando o
+orquestrador já escalou sozinho, e a prova de que o paralelo custa o maior dos
+dois tempos e não a soma.
 
 ## Os números
 
@@ -461,6 +524,7 @@ clinica/
   voz.py           TTS (say) e STT (Whisper), com tempo por estágio
   ligar.py         CLI de uma ligação ponta a ponta
   servidor.py      demo no navegador (http.server da stdlib)
+  orquestracao.py  supervisor determinístico, guardião de risco, escriba
   vad.py           detecção de fala por energia, com piso adaptativo
   retencao.py      política de retenção de transcrição, com CLI
 
@@ -476,10 +540,10 @@ avaliacao/
   painel.py        painel HTML
   relatorio.py     métricas agregadas
 
-tests/             190 testes, stdlib
+tests/             210 testes, stdlib
 ```
 
-**23 módulos, 6 911 linhas.** Banco: 4 especialidades, 6 profissionais,
+**25 módulos, 7 631 linhas.** Banco: 4 especialidades, 6 profissionais,
 40 pacientes, 819 slots em 3 semanas.
 
 A escassez do banco é desenhada, não sorteada: **só a Dra. Thaís Bittencourt
