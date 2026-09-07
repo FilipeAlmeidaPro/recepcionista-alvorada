@@ -50,7 +50,8 @@ def main() -> int:
 
     provedor = provedor_padrao()
     if provedor is None:
-        print("Sem chave de LLM. Veja o README para configurar.", file=sys.stderr)
+        print("Sem chave de LLM. Rode: cp exemplo.env .env "
+      "e preencha GROQ_API_KEY.", file=sys.stderr)
         return 2
 
     try:

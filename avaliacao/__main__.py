@@ -24,6 +24,7 @@ def main() -> int:
     p.add_argument("--familia", choices=sorted(FAMILIAS))
     p.add_argument("--provedor", choices=sorted(PERFIS) + ["simulado"],
                    help="simulado = recepcionista de regras, sem LLM e sem custo")
+    p.add_argument("--modelo", help="sobrescreve o modelo do provedor")
     p.add_argument("--paciente", choices=("roteirizado", "sintetico"),
                    default="roteirizado")
     p.add_argument("--json", metavar="ARQUIVO")
@@ -35,7 +36,7 @@ def main() -> int:
         if args.provedor == "simulado":
             agente = RecepcionistaSimulada()
         elif args.provedor:
-            agente = ProvedorOpenAICompativel(args.provedor)
+            agente = ProvedorOpenAICompativel(args.provedor, modelo=args.modelo)
         else:
             agente = provedor_padrao()
     except RuntimeError as e:

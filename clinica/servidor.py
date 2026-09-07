@@ -170,7 +170,10 @@ def main() -> int:
 
     provedor = provedor_padrao()
     if provedor is None:
-        print("Sem chave de LLM. Veja exemplo.env.", file=sys.stderr)
+        print("Sem chave de LLM.\n\n"
+              "  cp exemplo.env .env      e preencha GROQ_API_KEY\n"
+              "  console.groq.com/keys    free tier, sem cartão\n\n"
+              "O .env fica no .gitignore.", file=sys.stderr)
         return 2
     try:
         Ligacao.servidor_voz = {"provedor": provedor, "tts": SinteseMacOS(args.voz),
@@ -180,8 +183,10 @@ def main() -> int:
         return 2
 
     servidor = ThreadingHTTPServer(("127.0.0.1", args.porta), Ligacao)
-    print(f"Recepcionista Alvorada · {provedor.nome} · voz {args.voz}")
-    print(f"  http://127.0.0.1:{args.porta}\n  ctrl+c para parar")
+    # flush explícito: sem ele o banner só aparece quando o processo morre,
+    # e quem roda fica sem saber se subiu.
+    print(f"Recepcionista Alvorada · {provedor.nome} · voz {args.voz}", flush=True)
+    print(f"  http://127.0.0.1:{args.porta}\n  ctrl+c para parar", flush=True)
     try:
         servidor.serve_forever()
     except KeyboardInterrupt:

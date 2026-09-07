@@ -32,7 +32,7 @@ things with reliability numbers attached beats one that does twelve with none.
 ```bash
 git clone <this-repo> && cd alvorada-receptionist
 python3 -m clinica.seed --data-base 2026-09-03   # builds data/clinica.db
-python3 -m unittest discover -s . -t .           # 147 tests
+python3 -m unittest discover -s . -t .           # 177 tests
 python3 -m avaliacao --provedor simulado         # 40 scenarios, no LLM, US$ 0
 ```
 
@@ -42,7 +42,8 @@ The zero-cost constraint starts here, not at the API choice.
 To run against a real LLM (free tier, no credit card):
 
 ```bash
-export GROQ_API_KEY=...                    # console.groq.com/keys
+cp exemplo.env .env    # then fill GROQ_API_KEY — console.groq.com/keys
+                       # .env is gitignored; an exported var always wins
 python3 -m avaliacao --provedor groq --painel panel.html
 python3 -m avaliacao.audio                 # audio suite
 python3 -m clinica.ligar --falas "Good evening, I need an orthopedist" \
@@ -66,11 +67,33 @@ normalizer extracted (and whether it was a guess), every tool called, every
 validator rule that passed or blocked, and the milliseconds of each stage
 against the 800 ms target.
 
-**What it is:** push-to-talk. **What it isn't:** full-duplex with barge-in —
-interrupting the agent mid-sentence needs continuous VAD and streaming on both
-sides, which is where Pipecat would come in and the only part of the project
-that would break the zero-dependency promise. The seam is swapping this server
-for a WebRTC transport and keeping everything below it.
+### Hands-free and barge-in
+
+The "hands-free" checkbox turns on a **browser-side VAD**: it opens the turn
+when you start speaking, closes it when you stop, and **cuts the agent off
+mid-sentence if you talk over it**. A live meter shows the level and the
+threshold — you can watch the VAD decide.
+
+Rethinking the problem: barge-in is deciding *when to stop playing audio*, and
+turn detection is VAD. Both belong on the client. The plan called for Silero;
+Silero is better, and it's a model plus PyTorch — the difference between
+`git clone && python3` and twenty minutes of installation. Energy with
+hysteresis and a noise floor measured from the recording itself is enough for a
+phone call.
+
+`clinica/vad.py` is the same logic in Python, with **14 tests** over
+code-generated audio: digital silence, a quiet room, a short pause that must
+not end the turn, a click that must not open one, and a noisy background. The
+browser mirrors the parameters. It also trims silence before sending to
+Whisper — two seconds of silence cost quota and add no letters.
+
+**What's still missing:** *streaming* transcription. Without it the agent only
+starts thinking once you finish speaking. That needs paid streaming STT — the
+same conclusion the latency table had already reached from another direction.
+
+`silencio_final_s` is the most expensive parameter in the system: too short and
+it truncates speech, and the audio suite measured the price — entity extraction
+drops from **90% to 60%**.
 
 > The codebase, prompts and CLI are in Portuguese — the product is a
 > Brazilian clinic receptionist, and mixing languages in domain code makes it
@@ -390,6 +413,7 @@ clinica/
   voz.py           TTS (say) and STT (Whisper), with per-stage timing
   ligar.py         end-to-end call CLI
   servidor.py      browser demo (stdlib http.server)
+  vad.py           energy-based speech detection with an adaptive floor
 
 web/index.html     the page: push-to-talk and the live trace
 
@@ -403,7 +427,7 @@ avaliacao/
   painel.py        HTML panel
   relatorio.py     aggregate metrics
 
-tests/             147 tests, stdlib
+tests/             177 tests, stdlib
 ```
 
 **20 modules, 5,544 lines.** Database: 4 specialties, 6 professionals,

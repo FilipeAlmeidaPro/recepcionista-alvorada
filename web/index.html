@@ -66,6 +66,24 @@
     border-radius:999px;cursor:pointer;margin-left:auto}
   #reiniciar:hover{border-color:var(--tinta3);color:var(--tinta)}
 
+  .modo{margin-top:16px}
+  .modo label{display:flex;align-items:flex-start;gap:9px;cursor:pointer;
+    color:var(--tinta3);font-size:13px;max-width:56ch;line-height:1.45}
+  .modo input{accent-color:var(--verde);margin-top:2px;cursor:pointer}
+  .modo label:hover{color:var(--tinta2)}
+
+  .vad{margin-top:14px;display:flex;align-items:center;gap:12px}
+  .medidor{position:relative;flex:1;max-width:340px;height:8px;
+    background:var(--superficie2);border-radius:5px;overflow:hidden}
+  .nivel{height:100%;width:0;background:var(--tinta3);border-radius:5px;
+    transition:width .06s linear}
+  .nivel.falando{background:var(--verde)}
+  .limiar{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ambar);
+    left:0;transition:left .3s ease}
+  .rotuloVad{font:400 11.5px var(--mono);color:var(--tinta3);min-width:150px}
+  .rotuloVad.falando{color:var(--verde)}
+  .rotuloVad.interrompeu{color:var(--vermelho)}
+
   /* trace */
   .lateral{display:flex;flex-direction:column;gap:16px}
   .estagio{display:grid;grid-template-columns:96px 1fr 62px;gap:10px;
@@ -114,6 +132,15 @@
       <span class="dica">ou segure <kbd>espaço</kbd></span>
       <button id="reiniciar">Nova ligação</button>
     </div>
+    <div class="modo">
+      <label><input type="checkbox" id="maosLivres"> mãos livres — o VAD abre e
+        fecha o turno, e falar por cima interrompe o agente</label>
+    </div>
+    <div class="vad" id="vad" hidden>
+      <div class="medidor"><div class="nivel" id="nivel"></div>
+        <div class="limiar" id="limiar"></div></div>
+      <span class="rotuloVad" id="rotuloVad">ouvindo</span>
+    </div>
     <p class="erro" id="erro" hidden></p>
   </main>
 
@@ -154,13 +181,103 @@ function escreve(quem, texto){
   conversa.scrollTop = conversa.scrollHeight;
 }
 
+// --- áudio do agente, interrompível -----------------------------------------
+let tocando = null;
+
 function tocar(b64){
   if (!b64) return;
+  pararDeTocar();
   const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
   const url = URL.createObjectURL(new Blob([bytes], {type:"audio/wav"}));
   const a = new Audio(url);
-  a.onended = () => URL.revokeObjectURL(url);
+  a.onended = () => { URL.revokeObjectURL(url); if (tocando === a) tocando = null; };
+  tocando = a;
   a.play().catch(()=>{});
+}
+
+/** Barge-in: o paciente falou por cima. Calar na hora é a diferença entre
+ *  uma conversa e um recado gravado. */
+function pararDeTocar(){
+  if (!tocando) return false;
+  tocando.pause();
+  tocando.currentTime = 0;
+  tocando = null;
+  return true;
+}
+
+// --- VAD no navegador -------------------------------------------------------
+// Mesmos parâmetros de clinica/vad.py, que tem 14 testes em cima. O piso de
+// ruído é medido nesta gravação, não fixado: cada microfone e cada sala têm
+// o seu, e limiar absoluto funciona na mesa do dev e falha no celular.
+const VAD = {margemDb: 12, minFalaS: 0.25, silencioFinalS: 0.60};
+let vadAtivo = false, contexto = null, analisador = null, buffer = null;
+let historico = [], falando = false, desdeS = 0, calouEmS = 0;
+
+function db(rms){ return rms > 1e-9 ? 20 * Math.log10(rms) : -120; }
+
+function piso(){
+  if (historico.length < 12) return -65;
+  const ordenado = [...historico].sort((a,b) => a-b);
+  return Math.max(ordenado[Math.floor(ordenado.length * 0.20)], -65);
+}
+
+function iniciarVAD(fluxo){
+  contexto = new AudioContext();
+  analisador = contexto.createAnalyser();
+  analisador.fftSize = 1024;
+  contexto.createMediaStreamSource(fluxo).connect(analisador);
+  buffer = new Float32Array(analisador.fftSize);
+  vadAtivo = true;
+  requestAnimationFrame(medir);
+}
+
+function medir(t){
+  if (!vadAtivo) return;
+  requestAnimationFrame(medir);
+  if (contexto.state === "suspended") return;
+  analisador.getFloatTimeDomainData(buffer);
+  let soma = 0;
+  for (const v of buffer) soma += v * v;
+  const nivel = db(Math.sqrt(soma / buffer.length));
+  historico.push(nivel);
+  if (historico.length > 240) historico.shift();
+
+  const limiar = piso() + VAD.margemDb;
+  const agora = t / 1000;
+  const acima = nivel >= limiar;
+
+  // medidor: -65 dB na esquerda, -10 dB na direita
+  const pct = v => Math.max(0, Math.min(100, (v + 65) / 55 * 100));
+  $("#nivel").style.width = pct(nivel) + "%";
+  $("#nivel").classList.toggle("falando", acima);
+  $("#limiar").style.left = pct(limiar) + "%";
+
+  if (!$("#maosLivres").checked || ocupado) return;
+
+  if (acima){
+    calouEmS = 0;
+    if (!falando){
+      falando = true; desdeS = agora;
+      if (pararDeTocar()) marcaVad("interrompeu o agente", "interrompeu");
+      else marcaVad("ouvindo você", "falando");
+      comecar();
+    }
+  } else if (falando){
+    if (!calouEmS) calouEmS = agora;
+    if (agora - calouEmS >= VAD.silencioFinalS){
+      const duracao = calouEmS - desdeS;
+      falando = false; calouEmS = 0;
+      marcaVad("ouvindo");
+      if (duracao >= VAD.minFalaS) parar();
+      else cancelar();          // estalo, tosse, batida de mesa
+    }
+  }
+}
+
+function marcaVad(texto, classe=""){
+  const el = $("#rotuloVad");
+  el.textContent = texto;
+  el.className = "rotuloVad " + classe;
 }
 
 function pintaEstagios(e){
@@ -222,16 +339,25 @@ async function novaLigacao(){
 
 async function prepararMicrofone(){
   const fluxo = await navigator.mediaDevices.getUserMedia({audio:{
-    channelCount:1, echoCancellation:true, noiseSuppression:true}});
+    channelCount:1,
+    // echoCancellation é o que impede o VAD de escutar a própria voz do
+    // agente e "se interromper" sozinho. Sem ela, mãos livres entra em laço.
+    echoCancellation:true, noiseSuppression:true, autoGainControl:true}});
   gravador = new MediaRecorder(fluxo);
   gravador.ondataavailable = ev => { if (ev.data.size) pedacos.push(ev.data); };
-  gravador.onstop = enviar;
+  gravador.onstop = () => { if (descartar){ descartar = false; destravar(); }
+                            else enviar(); };
+  iniciarVAD(fluxo);
 }
 
+let descartar = false;
+
 function comecar(){
-  if (gravando || ocupado || !gravador || botao.disabled) return;
-  pedacos = []; gravando = true;
-  botao.classList.add("gravando"); rotulo.textContent = "Gravando… solte para enviar";
+  if (gravando || ocupado || !gravador) return;
+  if (!maosLivres() && botao.disabled) return;
+  pedacos = []; gravando = true; descartar = false;
+  botao.classList.add("gravando");
+  rotulo.textContent = maosLivres() ? "Ouvindo…" : "Gravando… solte para enviar";
   gravador.start();
 }
 
@@ -240,6 +366,22 @@ function parar(){
   gravando = false;
   botao.classList.remove("gravando"); rotulo.textContent = "Processando…";
   gravador.stop();
+}
+
+/** Turno curto demais para ser fala: joga fora sem gastar STT nem cota. */
+function cancelar(){
+  if (!gravando) return;
+  gravando = false; descartar = true;
+  botao.classList.remove("gravando");
+  gravador.stop();
+}
+
+function maosLivres(){ return $("#maosLivres").checked; }
+
+function destravar(){
+  ocupado = false;
+  botao.disabled = maosLivres();
+  rotulo.textContent = maosLivres() ? "Mãos livres" : "Segure para falar";
 }
 
 async function enviar(){
@@ -261,7 +403,7 @@ async function enviar(){
       tocar(d.audio);
     }
   }catch(e){ falha("Falha no turno: " + e.message); }
-  ocupado = false; botao.disabled = false; rotulo.textContent = "Segure para falar";
+  destravar();
 }
 
 botao.addEventListener("mousedown", comecar);
@@ -269,11 +411,21 @@ botao.addEventListener("touchstart", e => { e.preventDefault(); comecar(); }, {p
 addEventListener("mouseup", parar);
 addEventListener("touchend", parar);
 addEventListener("keydown", e => {
-  if (e.code === "Space" && !e.repeat && document.activeElement !== $("#reiniciar")){
+  if (e.code === "Space" && !e.repeat && !maosLivres()
+      && document.activeElement !== $("#reiniciar")){
     e.preventDefault(); comecar(); }
 });
-addEventListener("keyup", e => { if (e.code === "Space"){ e.preventDefault(); parar(); }});
+addEventListener("keyup", e => {
+  if (e.code === "Space" && !maosLivres()){ e.preventDefault(); parar(); }});
 $("#reiniciar").addEventListener("click", novaLigacao);
+$("#maosLivres").addEventListener("change", () => {
+  $("#vad").hidden = !maosLivres();
+  if (contexto?.state === "suspended") contexto.resume();
+  if (!maosLivres() && gravando) cancelar();
+  historico = []; falando = false; calouEmS = 0;
+  marcaVad("ouvindo");
+  destravar();
+});
 
 (async () => {
   try{ await prepararMicrofone(); }

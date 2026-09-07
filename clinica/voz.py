@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from clinica.provedor import (CotaDiariaEsgotada, _contexto_ssl,
-                              _espera_pedida)
+                              _espera_pedida, _garantir_env)
 
 VOZ_PADRAO = "Luciana"          # feminina, pt_BR, nativa do macOS
 TAXA = 16_000                   # o Whisper reamostra para 16 kHz de qualquer jeito
@@ -95,6 +95,7 @@ class TranscricaoGroq:
 
     def __init__(self, chave: str | None = None, *, modelo: str = MODELO_STT,
                  timeout: float = 60.0, tentativas: int = 5):
+        _garantir_env()
         self.chave = chave or os.environ.get("GROQ_API_KEY")
         if not self.chave:
             raise RuntimeError("Falta GROQ_API_KEY para a transcrição.")

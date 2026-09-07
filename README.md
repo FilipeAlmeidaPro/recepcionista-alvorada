@@ -33,7 +33,7 @@ doze sem nenhum.
 ```bash
 git clone <este-repo> && cd recepcionista-alvorada
 python3 -m clinica.seed --data-base 2026-09-03   # gera data/clinica.db
-python3 -m unittest discover -s . -t .           # 147 testes
+python3 -m unittest discover -s . -t .           # 177 testes
 python3 -m avaliacao --provedor simulado         # 40 cenários, sem LLM, US$ 0
 ```
 
@@ -43,7 +43,8 @@ restrição de custo zero começa aqui, não na escolha de API.
 Para rodar contra um LLM de verdade (free tier, sem cartão):
 
 ```bash
-export GROQ_API_KEY=...                    # console.groq.com/keys
+cp exemplo.env .env    # e preencha GROQ_API_KEY — console.groq.com/keys
+                       # o .env está no .gitignore; variável exportada na mão vence
 python3 -m avaliacao --provedor groq --painel painel.html
 python3 -m avaliacao.audio                 # suíte de áudio
 python3 -m clinica.ligar --falas "Boa noite, queria um ortopedista" \
@@ -67,11 +68,32 @@ normalizador extraiu (e se ela foi um chute), cada ferramenta chamada, cada
 regra do validador que passou ou bloqueou, e os milissegundos de cada estágio
 contra o alvo de 800 ms.
 
-**O que é:** push-to-talk. **O que não é:** full-duplex com barge-in —
-interromper o agente no meio da frase exige VAD contínuo e streaming dos dois
-lados, que é onde entraria o Pipecat e é a única parte do projeto que quebraria
-a promessa de zero dependências. O encaixe é trocar este servidor por um
-transporte WebRTC e manter tudo abaixo dele.
+### Mãos livres e barge-in
+
+A caixa "mãos livres" liga um **VAD no navegador**: ele abre o turno quando
+você começa a falar, fecha quando você para, e **cala o agente no meio da frase
+se você falar por cima**. Um medidor mostra o nível e o limiar ao vivo — dá
+para ver o VAD decidindo.
+
+Repensando o problema: barge-in é decidir *quando parar de tocar o áudio*, e
+detecção de turno é VAD. Os dois cabem no cliente. O plano previa Silero;
+Silero é melhor, e é um modelo mais PyTorch — a diferença entre
+`git clone && python3` e vinte minutos de instalação. Energia com histerese e
+piso de ruído medido na própria gravação resolve numa ligação telefônica.
+
+`clinica/vad.py` é a mesma lógica em Python, com **14 testes** sobre áudio
+gerado por código: silêncio digital, sala quieta, pausa curta que não pode
+encerrar o turno, estalo que não pode abrir, e fundo ruidoso. O navegador
+espelha os parâmetros. Ele também serve para recortar silêncio antes de mandar
+ao Whisper — dois segundos de silêncio custam cota e não acrescentam uma letra.
+
+**O que ainda falta:** transcrição em *streaming*. Sem ela o agente só começa a
+pensar quando você termina de falar. Isso exige STT em streaming pago — é a
+mesma conclusão a que a tabela de latência já tinha chegado por outro caminho.
+
+O `silencio_final_s` é o parâmetro mais caro do sistema: curto demais trunca a
+fala, e a suíte de áudio mediu o preço — extração de entidade cai de **90% para
+60%**.
 
 ---
 
@@ -382,6 +404,7 @@ clinica/
   voz.py           TTS (say) e STT (Whisper), com tempo por estágio
   ligar.py         CLI de uma ligação ponta a ponta
   servidor.py      demo no navegador (http.server da stdlib)
+  vad.py           detecção de fala por energia, com piso adaptativo
 
 web/index.html     a página: push-to-talk e o trace ao vivo
 
@@ -395,7 +418,7 @@ avaliacao/
   painel.py        painel HTML
   relatorio.py     métricas agregadas
 
-tests/             147 testes, stdlib
+tests/             177 testes, stdlib
 ```
 
 **20 módulos, 5 544 linhas.** Banco: 4 especialidades, 6 profissionais,

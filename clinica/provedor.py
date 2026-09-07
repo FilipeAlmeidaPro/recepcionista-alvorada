@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import re
 import ssl
 import time
@@ -157,6 +158,42 @@ def _espera_pedida(detalhe: str) -> float | None:
     return min(float(achado.group(1)) + 0.5, 65.0) if achado else None
 
 
+ARQUIVO_ENV = pathlib.Path(__file__).resolve().parent.parent / ".env"
+_env_carregado = False
+
+
+def carregar_env(caminho: pathlib.Path | None = None) -> dict[str, str]:
+    """Lê `.env` da raiz do projeto. Sem dependência, sem mágica de import.
+
+    A mensagem de erro mandava ver o `exemplo.env` e o código nunca lia um
+    `.env` — seguir a instrução não resolvia nada. Variável já definida no
+    ambiente sempre vence a do arquivo: quem exportou na mão quis aquilo.
+    """
+    global _env_carregado
+    alvo = caminho or ARQUIVO_ENV
+    lidas: dict[str, str] = {}
+    if not alvo.exists():
+        _env_carregado = True
+        return lidas
+    for linha in alvo.read_text(encoding="utf-8").splitlines():
+        linha = linha.strip()
+        if not linha or linha.startswith("#") or "=" not in linha:
+            continue
+        chave, _, valor = linha.partition("=")
+        chave, valor = chave.strip(), valor.strip().strip("\"'")
+        if not chave or not valor:
+            continue
+        lidas[chave] = valor
+        os.environ.setdefault(chave, valor)
+    _env_carregado = True
+    return lidas
+
+
+def _garantir_env() -> None:
+    if not _env_carregado:
+        carregar_env()
+
+
 def _contexto_ssl() -> ssl.SSLContext:
     """Encontra o bundle de certificados sem depender de instalação manual.
 
@@ -193,6 +230,7 @@ class ProvedorOpenAICompativel:
         self.nome = f"{perfil}:{modelo or modelo_padrao}"
         self._url = url
         self._modelo = modelo or modelo_padrao
+        _garantir_env()
         self._chave = chave or os.environ.get(env)
         self._timeout = timeout
         self._temperatura = temperatura
@@ -275,6 +313,7 @@ class ProvedorOpenAICompativel:
 def provedor_padrao() -> Provedor | None:
     """O provedor que houver chave para. `None` quando não há nenhuma — e aí a
     suíte roda roteirizada em vez de falhar."""
+    _garantir_env()
     for perfil, (_url, _modelo, env, _tpm) in PERFIS.items():
         if os.environ.get(env):
             return ProvedorOpenAICompativel(perfil)
