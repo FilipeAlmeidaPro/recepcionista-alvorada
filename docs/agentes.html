@@ -1,0 +1,340 @@
+<meta charset="utf-8">
+<title>Quem Confere Quem</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ground:#f4f5f3; --surface:#ffffff; --surface-2:#e9ebe8;
+    --ink:#0e120f; --ink-2:#4a544c; --ink-3:#79837a;
+    --line:rgba(14,18,15,.14); --line-2:rgba(14,18,15,.07);
+    --accent:#16a34a; --accent-soft:rgba(22,163,74,.10);
+    --llm:#b5361f; --llm-soft:rgba(181,54,31,.09);
+    --r1:8px; --r2:14px; --r3:16px;
+    --sans:"Space Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#0b0b0b; --surface:#131513; --surface-2:#1a1e1a;
+      --ink:#f8f8f6; --ink-2:#a3ada6; --ink-3:#6e786f;
+      --line:rgba(248,248,246,.15); --line-2:rgba(248,248,246,.07);
+      --accent:#4ade80; --accent-soft:rgba(74,222,128,.12);
+      --llm:#f0705a; --llm-soft:rgba(240,112,90,.13);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0b0b0b; --surface:#131513; --surface-2:#1a1e1a;
+    --ink:#f8f8f6; --ink-2:#a3ada6; --ink-3:#6e786f;
+    --line:rgba(248,248,246,.15); --line-2:rgba(248,248,246,.07);
+    --accent:#4ade80; --accent-soft:rgba(74,222,128,.12);
+    --llm:#f0705a; --llm-soft:rgba(240,112,90,.13);
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--ink);font:400 16px/1.62 var(--sans);
+    margin:0;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:64px 28px 120px}
+  .prosa{max-width:68ch}
+
+  h1{font:500 clamp(30px,5vw,44px)/1.12 var(--sans);letter-spacing:-.025em;
+    margin:0 0 16px;text-wrap:balance}
+  h2{font:500 13px/1.3 var(--mono);text-transform:uppercase;letter-spacing:.14em;
+    color:var(--ink-3);margin:76px 0 20px;padding-bottom:10px;
+    border-bottom:.5px solid var(--line)}
+  p{margin:0 0 16px;color:var(--ink-2)}
+  p.destaque{color:var(--ink);font-size:19px;line-height:1.55}
+  strong{color:var(--ink);font-weight:500}
+  code{font:400 .88em var(--mono);background:var(--surface-2);
+    padding:.12em .38em;border-radius:5px;color:var(--ink)}
+  a{color:var(--accent)}
+
+  .legenda{display:flex;flex-wrap:wrap;gap:20px;margin:26px 0 0;
+    font:400 13px var(--mono);color:var(--ink-3)}
+  .legenda span{display:flex;align-items:center;gap:8px}
+  .selo{width:11px;height:11px;border-radius:3px}
+  .selo.llm{background:var(--llm-soft);border:1.5px solid var(--llm)}
+  .selo.det{background:var(--accent-soft);border:1.5px solid var(--accent)}
+
+  figure{margin:36px 0 12px}
+  figure svg{display:block;width:100%;max-width:100%;height:auto;color:var(--ink-2)}
+  figcaption{font:400 13.5px/1.5 var(--sans);color:var(--ink-3);
+    margin-top:14px;max-width:64ch}
+  figcaption b{color:var(--ink-2);font-weight:500}
+
+  .d-llm{fill:var(--llm-soft);stroke:var(--llm);stroke-width:1.4}
+  .d-det{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.4}
+  .d-neutra{fill:var(--surface);stroke:currentColor;stroke-opacity:.3;stroke-width:1}
+  .d-vazia{fill:none;stroke:currentColor;stroke-opacity:.28;stroke-width:1.2;
+    stroke-dasharray:7 5}
+  .d-rot{fill:var(--ink);font:500 13px var(--sans)}
+  .d-rot-p{fill:var(--ink);font:500 12px var(--sans)}
+  .d-sub{fill:var(--ink-3);font:400 10.5px var(--mono)}
+  .d-num{fill:var(--ink-2);font:500 11.5px var(--mono)}
+  .d-num-llm{fill:var(--llm);font:500 11.5px var(--mono)}
+  .d-num-det{fill:var(--accent);font:500 11.5px var(--mono)}
+  .d-eixo{stroke:currentColor;stroke-opacity:.5;stroke-width:1.3;fill:none}
+  .d-eixo-frouxo{stroke:currentColor;stroke-opacity:.35;stroke-width:1.2;fill:none;
+    stroke-dasharray:5 4}
+  .d-seta{fill:var(--ink-3)}
+  .d-cab{fill:var(--ink-3);font:500 11px var(--mono);letter-spacing:.08em}
+
+  .tabela{overflow-x:auto;margin:22px 0}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:520px}
+  th,td{text-align:left;padding:10px 16px 10px 0;border-bottom:.5px solid var(--line-2);
+    vertical-align:top}
+  th{font:500 11.5px var(--mono);text-transform:uppercase;letter-spacing:.09em;
+    color:var(--ink-3);border-bottom-color:var(--line)}
+  td{color:var(--ink-2)}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;
+    font-family:var(--mono);font-size:13.5px;white-space:nowrap;
+    padding-right:22px}
+  td.forte{color:var(--ink);font-weight:500}
+  .tag{font:500 10.5px var(--mono);padding:3px 8px;border-radius:5px;
+    white-space:nowrap;display:inline-block}
+  .tag.llm{color:var(--llm);background:var(--llm-soft)}
+  .tag.det{color:var(--accent);background:var(--accent-soft)}
+  .apagado{color:var(--ink-3)}
+
+  .nota{border-left:2px solid var(--accent);background:var(--accent-soft);
+    padding:16px 20px;border-radius:0 var(--r1) var(--r1) 0;margin:26px 0}
+  .nota.aviso{border-left-color:var(--llm);background:var(--llm-soft)}
+  .nota p{margin:0;color:var(--ink)}
+  .nota p+p{margin-top:10px}
+
+  .rodape{margin-top:88px;padding-top:24px;border-top:.5px solid var(--line);
+    color:var(--ink-3);font-size:13.5px}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+<header class="prosa">
+  <h1>Quem confere quem</h1>
+  <p class="destaque">O elenco do Voice Agent Assistant: seis agentes, quatro
+  modelos, quatro superfícies. <strong>Três dos seis usam LLM — e os outros
+  três existem para conferir esses três.</strong></p>
+  <div class="legenda">
+    <span><i class="selo llm"></i> usa LLM · pode inventar</span>
+    <span><i class="selo det"></i> determinístico · não inventa</span>
+  </div>
+</header>
+
+<h2>O elenco em ação</h2>
+<div class="prosa">
+  <p>Numa ligação, o orquestrador é o único que fala com o paciente — e é o
+  único que pode inventar. Tudo à volta dele é código que não inventa: um
+  entrega o que foi dito já normalizado, outro confere o que ele quer gravar,
+  outro mede o que aconteceu.</p>
+</div>
+
+<figure>
+<svg viewBox="0 0 900 400" role="img" aria-label="O orquestrador com LLM ao centro: o paciente conversa com ele por cima, o normalizador o alimenta pela esquerda, o validador confere sua proposta pela direita antes do banco, e embaixo o juiz mede o que aconteceu enquanto o baseline de regras pode substituí-lo na mesma suíte.">
+  <defs>
+    <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
+            markerHeight="6" orient="auto-start-reverse">
+      <path class="d-seta" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+  </defs>
+
+  <!-- pacientes -->
+  <rect class="d-llm" x="300" y="26" width="132" height="58" rx="11"/>
+  <text class="d-rot-p" x="314" y="48">Paciente sintético</text>
+  <text class="d-sub" x="314" y="66">objetivo privado</text>
+
+  <rect class="d-det" x="452" y="26" width="142" height="58" rx="11"/>
+  <text class="d-rot-p" x="466" y="48">Paciente roteirizado</text>
+  <text class="d-sub" x="466" y="66">falas fixas</text>
+
+  <path class="d-eixo" marker-end="url(#a1)" d="M366,86 L366,120 L420,120 L420,146"/>
+  <path class="d-eixo" marker-end="url(#a1)" d="M523,86 L523,120 L470,120 L470,146"/>
+  <text class="d-sub" x="447" y="112" text-anchor="middle">conversa</text>
+
+  <!-- orquestrador -->
+  <rect class="d-llm" x="340" y="148" width="212" height="84" rx="13"/>
+  <text class="d-rot" x="356" y="176">Orquestrador</text>
+  <text class="d-sub" x="356" y="194">6 ferramentas · 348 linhas</text>
+  <text class="d-num-llm" x="356" y="216">o único que fala</text>
+
+  <!-- normalizador -->
+  <rect class="d-det" x="34" y="156" width="220" height="68" rx="12"/>
+  <text class="d-rot" x="50" y="182">Normalizador</text>
+  <text class="d-sub" x="50" y="200">restrição, dígitos, nomes</text>
+  <path class="d-eixo" marker-end="url(#a1)" d="M254,190 L336,190"/>
+  <text class="d-sub" x="295" y="182" text-anchor="middle">alimenta</text>
+
+  <!-- validador e banco -->
+  <rect class="d-det" x="632" y="148" width="234" height="84" rx="13"/>
+  <text class="d-rot" x="648" y="176">Validador</text>
+  <text class="d-sub" x="648" y="194">10 regras · 398 linhas</text>
+  <text class="d-num-det" x="648" y="216">aprova ou bloqueia</text>
+  <path class="d-eixo" marker-end="url(#a1)" d="M552,190 L628,190"/>
+  <text class="d-sub" x="590" y="182" text-anchor="middle">intenção</text>
+
+  <rect class="d-neutra" x="632" y="298" width="234" height="58" rx="11"/>
+  <text class="d-rot" x="648" y="322">Banco</text>
+  <text class="d-sub" x="648" y="340">double-booking impossível</text>
+  <path class="d-eixo" marker-end="url(#a1)" d="M749,232 L749,294"/>
+  <text class="d-sub" x="757" y="268">grava</text>
+
+  <!-- juiz -->
+  <rect class="d-det" x="34" y="298" width="220" height="58" rx="11"/>
+  <text class="d-rot" x="50" y="322">Juiz</text>
+  <text class="d-sub" x="50" y="340">40 cenários · 232 linhas</text>
+  <path class="d-eixo" marker-end="url(#a1)" d="M144,294 L144,258 L392,258 L392,236"/>
+  <text class="d-sub" x="200" y="250">mede o que aconteceu</text>
+
+  <!-- baseline -->
+  <rect class="d-det" x="340" y="298" width="212" height="58" rx="11"/>
+  <text class="d-rot" x="356" y="322">Baseline de regras</text>
+  <text class="d-sub" x="356" y="340">149 linhas · 37/40</text>
+  <path class="d-eixo-frouxo" marker-end="url(#a1)" d="M500,294 L500,236"/>
+  <text class="d-sub" x="510" y="272">substitui</text>
+</svg>
+<figcaption>O <b>VAD</b> não aparece no desenho porque age antes dele: é quem
+decide que o turno do paciente acabou, e é o parâmetro mais caro do sistema —
+curto demais trunca a fala e a extração de entidade cai de 90% para 60%.</figcaption>
+</figure>
+
+<h2>O que já rodou, e o que não</h2>
+<div class="prosa">
+  <p>A suíte é uma matriz: de um lado quem atende, do outro quem liga. Cada um
+  pode ser um LLM ou um roteiro. <strong>Uma das quatro células está
+  vazia</strong> — e é justamente a que o README chama de mais importante.</p>
+</div>
+
+<figure>
+<svg viewBox="0 0 900 360" role="img" aria-label="Matriz de dois por dois entre recepcionista de regras ou com LLM e paciente roteirizado ou sintético. Três células têm resultado medido; a célula do LLM com paciente sintético nunca rodou porque custaria 810 mil tokens.">
+  <text class="d-cab" x="404" y="34" text-anchor="middle">PACIENTE ROTEIRIZADO</text>
+  <text class="d-cab" x="700" y="34" text-anchor="middle">PACIENTE SINTÉTICO</text>
+  <text class="d-cab" x="24" y="122">RECEPCIONISTA</text>
+  <text class="d-cab" x="24" y="138">DE REGRAS</text>
+  <text class="d-cab" x="24" y="256">RECEPCIONISTA</text>
+  <text class="d-cab" x="24" y="272">COM LLM</text>
+
+  <rect class="d-det" x="264" y="52" width="280" height="120" rx="13"/>
+  <text class="d-num-det" x="284" y="86">37/40 · 92%</text>
+  <text class="d-sub" x="284" y="110">determinístico dos dois lados</text>
+  <text class="d-sub" x="284" y="128">US$ 0 · roda no CI a cada commit</text>
+  <text class="d-sub" x="284" y="146">é o piso de comparação</text>
+
+  <rect class="d-vazia" x="564" y="52" width="280" height="120" rx="13"/>
+  <text class="d-sub" x="584" y="86">nunca rodou</text>
+  <text class="d-sub" x="584" y="110">seria um bom controle:</text>
+  <text class="d-sub" x="584" y="128">o agente de regras aguenta</text>
+  <text class="d-sub" x="584" y="146">um paciente imprevisível?</text>
+
+  <rect class="d-llm" x="264" y="192" width="280" height="120" rx="13"/>
+  <text class="d-num-llm" x="284" y="226">24/28 · 8/12</text>
+  <text class="d-sub" x="284" y="250">gpt-oss-120b e gpt-oss-20b</text>
+  <text class="d-sub" x="284" y="268">dois modelos, porque a cota</text>
+  <text class="d-sub" x="284" y="286">não comporta os 40 num só</text>
+
+  <rect class="d-vazia" x="564" y="192" width="280" height="120" rx="13"/>
+  <text class="d-num-llm" x="584" y="226">a célula vazia</text>
+  <text class="d-sub" x="584" y="250">~810 mil tokens para os 40</text>
+  <text class="d-sub" x="584" y="268">o free tier dá 200 mil por dia</text>
+  <text class="d-sub" x="584" y="286">uma família de 7 cabe: ~142 mil</text>
+</svg>
+<figcaption>O README afirma que <b>o poder discriminante da suíte mora no
+paciente sintético</b>, porque o roteiro entrega a fala certa na hora certa e
+carrega um agente burro no colo — é por isso que uma recepcionista de 149
+linhas de <code>if</code> tira 92%. A afirmação é plausível e <b>ainda não tem
+prova</b>. Uma família de sete cenários cabe na cota de um dia.</figcaption>
+</figure>
+
+<h2>Os seis agentes</h2>
+<div class="tabela">
+<table>
+  <tr><th>agente</th><th>papel</th><th>motor</th><th class="n">tamanho</th></tr>
+  <tr><td class="forte">Orquestrador</td>
+      <td>conduz a ligação, chama 6 ferramentas, propõe escritas</td>
+      <td><span class="tag llm">LLM</span></td><td class="n">348</td></tr>
+  <tr><td class="forte">Paciente sintético</td>
+      <td>liga com objetivo privado e personalidade; não segue roteiro</td>
+      <td><span class="tag llm">LLM</span></td><td class="n">98</td></tr>
+  <tr><td class="forte">Extrator de entidade</td>
+      <td>só no benchmark: lê a fala crua e devolve a entidade</td>
+      <td><span class="tag llm">LLM</span></td><td class="n">—</td></tr>
+  <tr><td class="forte">Validador</td>
+      <td>10 regras entre a proposta do modelo e o banco</td>
+      <td><span class="tag det">código</span></td><td class="n">398</td></tr>
+  <tr><td class="forte">Juiz</td>
+      <td>julga 40 cenários pelo que aconteceu, não pelo texto</td>
+      <td><span class="tag det">código</span></td><td class="n">232</td></tr>
+  <tr><td class="forte">Baseline de regras</td>
+      <td>recepcionista sem LLM; prova que o juiz reprova agente ruim</td>
+      <td><span class="tag det">código</span></td><td class="n">149</td></tr>
+</table>
+</div>
+<div class="prosa">
+  <p>Mais dois que decidem sem serem agentes: o <strong>normalizador</strong>
+  (562 linhas) converte fala em filtro, e o <strong>VAD</strong> (137 linhas)
+  decide quando o turno acabou. Nenhum dos dois inventa.</p>
+</div>
+
+<h2>Os modelos</h2>
+<div class="tabela">
+<table>
+  <tr><th>modelo</th><th>papel</th><th class="n">latência</th><th>o que entregou</th></tr>
+  <tr><td class="forte">groq · <code>gpt-oss-120b</code></td><td>orquestrador (padrão)</td>
+      <td class="n">804 ms</td><td>24/28 cenários</td></tr>
+  <tr><td class="forte">groq · <code>gpt-oss-20b</code></td><td>orquestrador</td>
+      <td class="n">751 ms</td><td>8/12 cenários</td></tr>
+  <tr><td>groq · <code>qwen3.8-27b</code></td><td>orquestrador</td>
+      <td class="n">649 ms</td><td><span class="apagado">nunca rodou a suíte</span></td></tr>
+  <tr><td class="forte">groq · <code>whisper-large-v3-turbo</code></td><td>STT</td>
+      <td class="n">785 ms</td><td>90% limpo · 100% com ruído · 60% cortado</td></tr>
+  <tr><td>gemini · <code>3.5-flash</code></td><td>extrator de entidade</td>
+      <td class="n">3 700 ms</td><td>93% em 50 falas rotuladas</td></tr>
+  <tr><td>gemini · <code>3.1-flash-lite</code></td><td>orquestrador</td>
+      <td class="n">2 600 ms</td><td>uma ligação completa</td></tr>
+  <tr><td>gemini · <code>3.8-flash</code></td><td>—</td>
+      <td class="n">41 600 ms</td><td>1/5 · o mais novo é o pior aqui</td></tr>
+  <tr><td class="forte">macOS · <code>say</code></td><td>TTS, voz Luciana</td>
+      <td class="n">534 ms</td><td>grátis de verdade, não free tier</td></tr>
+</table>
+</div>
+
+<div class="nota aviso">
+  <p><strong>Nenhum LLM é obrigatório para rodar o projeto.</strong> Sem chave
+  nenhuma: 192 testes passam, os 40 cenários rodam contra o baseline de regras,
+  e o benchmark de entidade compara regex contra normalizador. O LLM entra para
+  medir <em>o modelo</em>, não para o sistema funcionar.</p>
+</div>
+
+<h2>As quatro superfícies</h2>
+<div class="tabela">
+<table>
+  <tr><th>superfície</th><th>o que mostra</th><th>como abrir</th></tr>
+  <tr><td class="forte">Trace ao vivo</td>
+      <td>a ligação acontecendo: restrição extraída, ferramentas, regras que
+          passaram ou bloquearam, ms por estágio, medidor do VAD</td>
+      <td><code>python3 -m clinica.servidor</code></td></tr>
+  <tr><td class="forte">Painel da rodada</td>
+      <td>conclusão, recuperação, motivos de contato, bloqueios por regra,
+          e cada ligação abrindo em transcrição mascarada</td>
+      <td><code>--painel painel.html</code></td></tr>
+  <tr><td class="forte">Relatório de terminal</td>
+      <td>o mesmo, em texto, para o CI</td>
+      <td><code>python3 -m avaliacao</code></td></tr>
+  <tr><td class="forte">Documento de arquitetura</td>
+      <td>os três diagramas, os números medidos, o limite do portão</td>
+      <td><code>docs/arquitetura.html</code></td></tr>
+</table>
+</div>
+
+<div class="nota">
+  <p><strong>A conta que importa: três dos seis agentes usam LLM.</strong> Os
+  outros três — validador, juiz, baseline — existem exatamente para conferir
+  esses três. Some o normalizador e o VAD, que também não inventam, e a razão
+  vira <strong>três que podem errar contra cinco que checam</strong>.</p>
+  <p>É a mesma tese do projeto dita de outro jeito: <em>o modelo propõe, o
+  código escreve</em>. O organograma é a arquitetura.</p>
+</div>
+
+<div class="rodape">
+  Voice Agent Assistant ·
+  <a href="https://github.com/FilipeAlmeidaPro/voice-agent-assistant">github.com/FilipeAlmeidaPro/voice-agent-assistant</a>
+  · 192 testes, zero dependências · todos os números medidos neste repositório.
+</div>
+</div>
