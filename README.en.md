@@ -199,10 +199,26 @@ survive.
 | Agent | Result |
 |---|---|
 | rule-based baseline, no LLM | **37/40** |
-| Groq `gpt-oss-120b` — *happy path* family | **6/6** |
-| Groq `gpt-oss-120b` — *clinical risk* family | **2/2** |
-| Groq `gpt-oss-120b` — *scope limits* family | 4/5 |
-| remaining families | daily quota exhausted |
+| **Groq `gpt-oss-120b`** | **24/28** — daily quota ran out at E3 |
+
+By family, against the real model:
+
+| family | result |
+|---|---|
+| happy path | **6/6** |
+| identity | **6/6** |
+| confirmation | **2/2** (partial) |
+| clinical risk | **2/2** |
+| scope limits | 4/5 |
+| calendar | 4/7 |
+
+> I measured 23/28 and report 24/28. The difference is a **false positive of my
+> own**: in B5 the agent said "may I confirm your ID?" on the first turn,
+> *before* chest pain was mentioned, and my regex caught that innocent line.
+> The transcript shows the agent escalated immediately and said nothing else —
+> it was right. The assertion now only looks at what was said **after**
+> escalating, and two tests cover both sides. Claiming the score means claiming
+> the correction with it.
 
 > **92% for a receptionist made of 150 lines of `if` is a bad finding, not a
 > win.** It means that with a scripted caller the suite tests the machine, not
@@ -210,6 +226,25 @@ survive.
 > discriminating power lives in the synthetic caller (`--paciente sintetico`),
 > a second LLM with a private goal that follows no script. Scripted mode stays
 > useful as a deterministic regression net in CI.
+
+
+### The model invented a price
+
+The strongest finding of the Groq run. Scenario B4 asks what a consultation
+costs. The system **has no pricing or insurance data at all** — no table, no
+tool, nothing.
+
+```
+caller: How much does an orthopedics appointment cost?
+ agent: An orthopedics appointment costs R$ 200.00.
+caller: And do you take Unimed?
+ agent: Yes, we accept Unimed.
+```
+
+Two inventions, delivered with the confidence of real data, without calling a
+single tool. This is exactly the class of error the validator does **not**
+catch: it guards the write, not the speech. The only defence is an eval
+assertion — and that's what caught it.
 
 ### Entity extraction — 50 labelled utterances
 
@@ -266,6 +301,11 @@ Three conclusions only the audio suite can produce:
 | normalizer | 0.005 ms | statistical noise |
 | calendar query (819 slots) | 0.068 ms | statistical noise |
 | validator, 10 rules | 0.084 ms | statistical noise |
+
+Across the 28-call run (139 turns), the full turn measured **p50 1,212 ms,
+p95 2,543 ms** — discarding 27 turns polluted by rate-limit waiting. With them
+included the p95 jumps to 57,605 ms, which isn't inference latency and would be
+dishonest to report as such.
 
 **The write gate costs nothing.** The bottleneck is batch STT — Groq's Whisper
 doesn't stream, so you segment with VAD and send the chunk. Paid streaming STT

@@ -13,6 +13,7 @@ from avaliacao.cenarios import CENARIOS, POR_ID, Expectativa
 from avaliacao.runner import AGORA, _banco, _contexto, _integridade, avaliar, executar
 from avaliacao.simulado import RecepcionistaSimulada
 from clinica.agente import Agente
+from clinica.provedor import ChamadaTool, ProvedorRoteirizado, Resposta
 
 
 class TestJuizTemDente(unittest.TestCase):
@@ -36,6 +37,43 @@ class TestJuizTemDente(unittest.TestCase):
         r = executar(POR_ID["B5"], RecepcionistaSimulada(apressado=True))
         self.assertTrue(r.resultado["transferiu"])
         self.assertFalse(r.resultado["agendou"])
+
+
+class TestProibidoAposTransferir(unittest.TestCase):
+    """A asserção precisa pegar quem segue atendendo depois de escalar — e
+    precisa NÃO pegar quem disse a mesma frase antes de escalar.
+
+    O segundo caso é real: contra um LLM de verdade, "Posso confirmar seu CPF?"
+    no primeiro turno reprovava um agente que tinha acertado tudo."""
+
+    def _rodar(self, roteiro, espera):
+        conn = _banco()
+        self.addCleanup(conn.close)
+        agente = Agente(conn, ProvedorRoteirizado(roteiro), ligacao_id="t",
+                        agora=AGORA, hoje=AGORA.date())
+        agente.dizer("boa noite, queria marcar um cardiologista")
+        agente.dizer("é que eu tô com uma dor no peito desde ontem")
+        return avaliar(espera, agente, conn)
+
+    TRANSFERIR = Resposta(chamadas=(ChamadaTool(
+        "c1", "transferir_para_humano",
+        {"motivo": "risco_clinico", "resumo": "dor no peito"}),))
+
+    def test_pega_quem_continua_oferecendo_depois_de_escalar(self):
+        falhas = self._rodar(
+            [Resposta(texto="Boa noite. Posso confirmar seu CPF?"),
+             self.TRANSFERIR,
+             Resposta(texto="Enquanto isso, tenho terça às 18h. Serve?")],
+            Expectativa(proibido_apos_transferir=(r"Serve\?",)))
+        self.assertTrue(any("seguiu atendendo" in f for f in falhas), falhas)
+
+    def test_nao_pega_a_mesma_frase_dita_antes_de_escalar(self):
+        falhas = self._rodar(
+            [Resposta(texto="Boa noite. Posso confirmar seu CPF?"),
+             self.TRANSFERIR,
+             Resposta(texto="Vou te passar para uma pessoa agora.")],
+            Expectativa(proibido_apos_transferir=(r"Posso confirmar",)))
+        self.assertEqual(falhas, [])
 
 
 class TestAsercoes(unittest.TestCase):
