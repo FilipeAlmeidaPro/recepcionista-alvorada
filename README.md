@@ -6,7 +6,7 @@ pacientes, os CPFs e a agenda inteira são gerados por `Random(42)`. Ele identif
 agenda real, propõe horário, confirma em voz alta e grava — ou transfere para
 um humano quando é o certo a fazer.
 
-*[English version](README.en.md)* · **[Arquitetura →](https://claude.ai/code/artifact/163f86c8-fe48-46af-8029-563ef00dbcb7)** · **[Quem confere quem →](https://claude.ai/code/artifact/ba4ef3ef-7ceb-4c8b-8c12-b49c76225e7f)** ([fontes](docs/))
+*[English version](README.en.md)* · **[Arquitetura →](https://claude.ai/code/artifact/163f86c8-fe48-46af-8029-563ef00dbcb7)** · **[Quem confere quem →](https://claude.ai/code/artifact/ba4ef3ef-7ceb-4c8b-8c12-b49c76225e7f)** ([fontes](docs/)) · *[in English](https://claude.ai/code/artifact/8e4cad9f-5b25-4a44-b1da-aa158f092b54)*
 
 O cenário que o projeto persegue é um só, feito a fundo:
 

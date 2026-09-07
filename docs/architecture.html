@@ -1,0 +1,597 @@
+<meta charset="utf-8">
+<title>The Write Gate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ground:#f4f5f3; --surface:#ffffff; --surface-2:#e9ebe8;
+    --ink:#0e120f; --ink-2:#4a544c; --ink-3:#79837a;
+    --line:rgba(14,18,15,.14); --line-2:rgba(14,18,15,.07);
+    --accent:#16a34a; --accent-soft:rgba(22,163,74,.10);
+    --danger:#b5361f; --danger-soft:rgba(181,54,31,.09);
+    --r1:8px; --r2:14px; --r3:16px;
+    --sans:"Space Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#0b0b0b; --surface:#131513; --surface-2:#1a1e1a;
+      --ink:#f8f8f6; --ink-2:#a3ada6; --ink-3:#6e786f;
+      --line:rgba(248,248,246,.15); --line-2:rgba(248,248,246,.07);
+      --accent:#4ade80; --accent-soft:rgba(74,222,128,.12);
+      --danger:#f0705a; --danger-soft:rgba(240,112,90,.13);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0b0b0b; --surface:#131513; --surface-2:#1a1e1a;
+    --ink:#f8f8f6; --ink-2:#a3ada6; --ink-3:#6e786f;
+    --line:rgba(248,248,246,.15); --line-2:rgba(248,248,246,.07);
+    --accent:#4ade80; --accent-soft:rgba(74,222,128,.12);
+    --danger:#f0705a; --danger-soft:rgba(240,112,90,.13);
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--ink);font:400 16px/1.62 var(--sans);
+    margin:0;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:64px 28px 120px}
+  .prosa{max-width:68ch}
+
+  h1{font:500 clamp(30px,5vw,44px)/1.12 var(--sans);letter-spacing:-.025em;
+    margin:0 0 16px;text-wrap:balance}
+  h2{font:500 13px/1.3 var(--mono);text-transform:uppercase;letter-spacing:.14em;
+    color:var(--ink-3);margin:76px 0 20px;padding-bottom:10px;
+    border-bottom:.5px solid var(--line)}
+  h3{font:500 19px/1.35 var(--sans);margin:36px 0 10px;letter-spacing:-.01em;
+    text-wrap:balance}
+  p{margin:0 0 16px;color:var(--ink-2)}
+  p.destaque{color:var(--ink);font-size:19px;line-height:1.55}
+  strong{color:var(--ink);font-weight:500}
+  code{font:400 .88em var(--mono);background:var(--surface-2);
+    padding:.12em .38em;border-radius:5px;color:var(--ink)}
+  a{color:var(--accent)}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:26px 0 0}
+  .chip{font:500 12px var(--mono);padding:6px 12px;border-radius:999px;
+    background:var(--surface);border:.5px solid var(--line);color:var(--ink-2)}
+  .chip b{color:var(--accent);font-weight:500}
+
+  figure{margin:36px 0 12px}
+  figure svg{display:block;width:100%;max-width:100%;height:auto;
+    color:var(--ink-2)}
+  figcaption{font:400 13.5px/1.5 var(--sans);color:var(--ink-3);
+    margin-top:14px;max-width:64ch}
+  figcaption b{color:var(--ink-2);font-weight:500}
+
+  /* diagram marks — classes in the page CSS, never inside the <svg> */
+  .d-caixa{fill:var(--surface);stroke:currentColor;stroke-opacity:.32;stroke-width:1}
+  .d-caixa-forte{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.4}
+  .d-caixa-fraca{fill:var(--surface-2);stroke:currentColor;stroke-opacity:.18;stroke-width:1}
+  .d-rot{fill:var(--ink);font:500 13px var(--sans)}
+  .d-sub{fill:var(--ink-3);font:400 10.5px var(--mono)}
+  .d-num{fill:var(--ink-2);font:500 11.5px var(--mono)}
+  .d-num-forte{fill:var(--accent);font:500 11.5px var(--mono)}
+  .d-eixo{stroke:currentColor;stroke-opacity:.5;stroke-width:1.3;fill:none}
+  .d-borda{stroke:currentColor;stroke-opacity:.2;stroke-width:1;fill:none}
+  .d-morto{stroke:var(--danger);stroke-width:1.3;stroke-dasharray:6 4;fill:none;
+    stroke-opacity:.85}
+  .d-txt-morto{fill:var(--danger);font:500 11.5px var(--mono)}
+  .d-seta{fill:var(--ink-3)}
+  .d-seta-morta{fill:var(--danger)}
+  .d-barra-stt{fill:var(--ink-3)}
+  .d-barra-llm{fill:var(--danger)}
+  .d-barra-tts{fill:var(--ink-3);opacity:.65}
+  .d-barra-det{fill:var(--accent)}
+  .d-alvo{stroke:var(--accent);stroke-width:1.4;stroke-dasharray:4 3}
+  .d-ok{fill:var(--accent);font:500 14px var(--sans)}
+  .d-erro{fill:var(--danger);font:500 14px var(--sans)}
+  .d-regra{fill:var(--ink-2);font:400 11.5px var(--mono)}
+  .d-regra-forte{fill:var(--accent);font:500 11.5px var(--mono)}
+
+  .tabela{overflow-x:auto;margin:22px 0}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:460px}
+  th,td{text-align:left;padding:9px 16px 9px 0;border-bottom:.5px solid var(--line-2)}
+  th{font:500 11.5px var(--mono);text-transform:uppercase;letter-spacing:.09em;
+    color:var(--ink-3);border-bottom-color:var(--line)}
+  td{color:var(--ink-2)}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;
+    font-family:var(--mono);font-size:13.5px}
+  td.forte{color:var(--ink);font-weight:500}
+  .bom{color:var(--accent)}
+  .ruim{color:var(--danger)}
+
+  .nota{border-left:2px solid var(--accent);background:var(--accent-soft);
+    padding:16px 20px;border-radius:0 var(--r1) var(--r1) 0;margin:26px 0}
+  .nota p{margin:0;color:var(--ink)}
+  .nota p+p{margin-top:10px}
+
+  pre{background:var(--surface);border:.5px solid var(--line);
+    border-radius:var(--r2);padding:18px 20px;overflow-x:auto;
+    font:400 13px/1.65 var(--mono);color:var(--ink-2);margin:20px 0}
+  pre .b{color:var(--danger)}
+  pre .g{color:var(--accent)}
+
+  .rodape{margin-top:88px;padding-top:24px;border-top:.5px solid var(--line);
+    color:var(--ink-3);font-size:13.5px}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+<header class="prosa">
+  <h1>The write gate</h1>
+  <p class="destaque">Architecture of a Brazilian-Portuguese voice
+  receptionist for a clinic. The thesis fits in one line: <strong>the model
+  proposes, the code writes.</strong></p>
+  <div class="chips">
+    <span class="chip"><b>213</b> tests</span>
+    <span class="chip"><b>10</b> validation rules</span>
+    <span class="chip"><b>40</b> eval scenarios</span>
+    <span class="chip"><b>0</b> dependencies</span>
+    <span class="chip"><b>7,631</b> lines</span>
+  </div>
+</header>
+
+<h2>One voice turn</h2>
+<div class="prosa">
+  <p>A call is a sequence of turns, and every turn crosses six stages. Three
+  are network, three are local code. The gap between them is four orders of
+  magnitude — and that is what decides where optimising is worth anything.</p>
+</div>
+
+<figure>
+<svg viewBox="0 0 960 330" role="img" aria-label="A six-stage voice turn pipeline with the measured latency of each stage, and a proportional bar showing that STT alone consumes the entire 800 millisecond budget.">
+  <defs>
+    <marker id="s1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
+            markerHeight="6" orient="auto-start-reverse">
+      <path class="d-seta" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+  </defs>
+
+  <!-- stage pipeline -->
+  <g>
+    <rect class="d-caixa" x="54" y="34" width="132" height="72" rx="12"/>
+    <text class="d-rot" x="70" y="60">STT</text>
+    <text class="d-sub" x="70" y="76">whisper-v3-turbo</text>
+    <text class="d-num" x="70" y="94">785 ms</text>
+
+    <rect class="d-caixa-forte" x="198" y="34" width="132" height="72" rx="12"/>
+    <text class="d-rot" x="214" y="60">Normalizer</text>
+    <text class="d-sub" x="214" y="76">deterministic</text>
+    <text class="d-num-forte" x="214" y="94">0.005 ms</text>
+
+    <rect class="d-caixa" x="342" y="34" width="132" height="72" rx="12"/>
+    <text class="d-rot" x="358" y="60">Orchestrator</text>
+    <text class="d-sub" x="358" y="76">LLM + 6 tools</text>
+    <text class="d-num" x="358" y="94">1,446 ms</text>
+
+    <rect class="d-caixa-forte" x="486" y="34" width="132" height="72" rx="12"/>
+    <text class="d-rot" x="502" y="60">Validator</text>
+    <text class="d-sub" x="502" y="76">10 rules</text>
+    <text class="d-num-forte" x="502" y="94">0.084 ms</text>
+
+    <rect class="d-caixa-forte" x="630" y="34" width="132" height="72" rx="12"/>
+    <text class="d-rot" x="646" y="60">Database</text>
+    <text class="d-sub" x="646" y="76">SQLite</text>
+    <text class="d-num-forte" x="646" y="94">0.068 ms</text>
+
+    <rect class="d-caixa" x="774" y="34" width="132" height="72" rx="12"/>
+    <text class="d-rot" x="790" y="60">TTS</text>
+    <text class="d-sub" x="790" y="76">say, on-device</text>
+    <text class="d-num" x="790" y="94">534 ms</text>
+  </g>
+  <g class="d-eixo" marker-end="url(#s1)">
+    <path d="M186,70 L196,70"/><path d="M330,70 L340,70"/>
+    <path d="M474,70 L484,70"/><path d="M618,70 L628,70"/>
+    <path d="M762,70 L772,70"/>
+  </g>
+  <path class="d-eixo" marker-end="url(#s1)" d="M20,70 L52,70"/>
+  <text class="d-sub" x="20" y="24">caller speaks</text>
+  <text class="d-sub" x="906" y="24" text-anchor="end">spoken reply</text>
+
+  <!-- where the time goes -->
+  <text class="d-sub" x="54" y="176">WHERE THE 2,765 ms GO</text>
+  <g>
+    <rect class="d-barra-stt" x="54" y="188" width="238" height="26" rx="4"/>
+    <rect class="d-barra-llm" x="296" y="188" width="444" height="26" rx="4"/>
+    <rect class="d-barra-tts" x="744" y="188" width="162" height="26" rx="4"/>
+  </g>
+  <text class="d-num" x="173" y="234" text-anchor="middle">STT · 785 ms</text>
+  <text class="d-num" x="518" y="234" text-anchor="middle">orchestrator + LLM · 1,446 ms</text>
+  <text class="d-num" x="825" y="234" text-anchor="middle">TTS · 534 ms</text>
+
+  <!-- target -->
+  <path class="d-alvo" d="M300,180 L300,258"/>
+  <text class="d-num-forte" x="308" y="256">market target: 800 ms — STT alone already eats it</text>
+
+  <!-- deterministic layer annotation -->
+  <path class="d-borda" d="M294,214 L294,290 L326,290"/>
+  <text class="d-num-forte" x="334" y="294">normalizer + validator + database = 0.157 ms · 2 px at this scale</text>
+</svg>
+<figcaption><b>The write gate costs nothing.</b> The three deterministic
+stages add up to 0.157 ms — two pixels on the bar. The bottleneck is batch STT:
+Groq's Whisper doesn't stream, so you segment speech with VAD and ship the whole
+chunk. Swapping in paid streaming STT is what moves that number; nothing else
+does.</figcaption>
+</figure>
+
+<h2>The gate</h2>
+<div class="prosa">
+  <p>No write tool is ever called directly by the model. It emits an
+  <strong>intent</strong> — a proposal — and ten rules in code decide whether it
+  becomes a row in the database.</p>
+  <p>The arrow that doesn't exist is the important part of the drawing.</p>
+</div>
+
+<figure>
+<svg viewBox="0 0 960 410" role="img" aria-label="The orchestrator does not write to the database directly: that arrow is crossed out. It emits an intent that passes ten validation rules before the tools write; when rejected, the intent goes back to the agent to re-propose.">
+  <defs>
+    <marker id="s2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
+            markerHeight="6" orient="auto-start-reverse">
+      <path class="d-seta" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+    <marker id="s2m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
+            markerHeight="6" orient="auto-start-reverse">
+      <path class="d-seta-morta" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+  </defs>
+
+  <!-- the path that does not exist -->
+  <text class="d-txt-morto" x="490" y="28" text-anchor="middle">direct write by the model — does not exist</text>
+  <path class="d-morto" marker-end="url(#s2m)"
+        d="M84,168 L84,50 L896,50 L896,166"/>
+  <g class="d-morto" stroke-dasharray="0" stroke-width="1.8">
+    <path d="M482,42 L498,58"/><path d="M498,42 L482,58"/>
+  </g>
+
+  <!-- the real flow -->
+  <rect class="d-caixa" x="18" y="170" width="132" height="72" rx="12"/>
+  <text class="d-rot" x="34" y="200">Orchestrator</text>
+  <text class="d-sub" x="34" y="218">LLM + 6 tools</text>
+
+  <rect class="d-caixa" x="220" y="170" width="100" height="72" rx="12"/>
+  <text class="d-rot" x="236" y="200">Intent</text>
+  <text class="d-sub" x="236" y="218">proposal</text>
+
+  <rect class="d-caixa-forte" x="390" y="80" width="228" height="272" rx="14"/>
+  <text class="d-rot" x="406" y="108">Validator</text>
+  <text class="d-regra" x="406" y="136">R1 · idempotency key</text>
+  <text class="d-regra" x="406" y="158">R2 · patient exists</text>
+  <text class="d-regra" x="406" y="180">R3 · slot exists</text>
+  <text class="d-regra" x="406" y="202">R4 · still in the future</text>
+  <text class="d-regra" x="406" y="224">R5 · still free</text>
+  <text class="d-regra" x="406" y="246">R6 · specialty matches</text>
+  <text class="d-regra" x="406" y="268">R7 · within the constraint</text>
+  <text class="d-regra-forte" x="406" y="290">R8 · confirmation matches</text>
+  <text class="d-regra" x="406" y="312">R9 · slot was offered</text>
+  <text class="d-regra" x="406" y="334">R10 · reschedule origin</text>
+
+  <rect class="d-caixa" x="688" y="170" width="88" height="72" rx="12"/>
+  <text class="d-rot" x="704" y="200">tools</text>
+  <text class="d-sub" x="704" y="218">writes</text>
+
+  <rect class="d-caixa" x="846" y="170" width="100" height="72" rx="12"/>
+  <text class="d-rot" x="862" y="200">Database</text>
+  <text class="d-sub" x="862" y="218">SQLite</text>
+
+  <g class="d-eixo" marker-end="url(#s2)">
+    <path d="M150,206 L216,206"/>
+    <path d="M320,206 L386,206"/>
+    <path d="M618,206 L684,206"/>
+    <path d="M776,206 L842,206"/>
+  </g>
+  <text class="d-sub" x="183" y="196" text-anchor="middle">proposes</text>
+  <text class="d-sub" x="651" y="196" text-anchor="middle">approved</text>
+  <text class="d-sub" x="809" y="196" text-anchor="middle">writes to DB</text>
+
+  <!-- rejection path -->
+  <path class="d-eixo" marker-end="url(#s2)" d="M504,352 L504,386 L270,386 L270,244"/>
+  <text class="d-sub" x="524" y="382">rejected · the agent explains in one line and re-proposes</text>
+</svg>
+<figcaption>The model never touches the database. The rule that costs most
+to forget lives one layer below even the validator: a <b>partial unique
+index</b> on <code>agendamentos(slot_id) WHERE status='confirmado'</code> makes
+double-booking <b>impossible by construction</b>, not unlikely by luck of the
+prompt. One test bypasses the tools and writes straight to the database; the
+database refuses.</figcaption>
+</figure>
+
+<h2>R8 — the rule that catches hallucination</h2>
+<div class="prosa">
+  <p>The validator doesn't only receive structured arguments. It receives
+  <strong>the sentence the agent spoke out loud</strong>, read from the
+  transcript — not the one it claims to have said.</p>
+  <p>If it queried Tuesday and confirmed "Thursday", the entities diverge and
+  the write is blocked, with every argument correct.</p>
+</div>
+
+<figure>
+<svg viewBox="0 0 900 350" role="img" aria-label="Comparison between the entities the agent spoke out loud and those of the slot it was about to write: professional, day of month and time match, but the weekday diverges, so rule R8 blocks the write.">
+  <text class="d-sub" x="40" y="28">WHAT THE AGENT SAID</text>
+  <text class="d-sub" x="500" y="28">WHAT IT WAS ABOUT TO WRITE</text>
+
+  <rect class="d-caixa" x="40" y="40" width="360" height="76" rx="12"/>
+  <text class="d-regra" x="56" y="66">"Dra. Thaís Bittencourt,</text>
+  <text class="d-regra" x="56" y="86">quinta-feira, dia 8 de setembro,</text>
+  <text class="d-regra" x="56" y="106">às 18h. Confirma?"</text>
+
+  <rect class="d-caixa-fraca" x="500" y="40" width="360" height="76" rx="12"/>
+  <text class="d-regra" x="516" y="66">slot 167 · Dra. Thaís Bittencourt</text>
+  <text class="d-regra" x="516" y="86">2026-09-08 18:00 · Ortopedia</text>
+  <text class="d-sub" x="516" y="106">Tuesday</text>
+
+  <text class="d-sub" x="40" y="156">ENTITIES COMPARED</text>
+  <path class="d-borda" d="M40,164 L860,164"/>
+
+  <g>
+    <text class="d-regra" x="40" y="192">professional</text>
+    <text class="d-regra" x="230" y="192">Thaís Bittencourt</text>
+    <text class="d-ok" x="452" y="193">✓</text>
+    <text class="d-regra" x="500" y="192">Thaís Bittencourt</text>
+
+    <text class="d-regra" x="40" y="226">weekday</text>
+    <text class="d-txt-morto" x="230" y="226">Thursday</text>
+    <text class="d-erro" x="452" y="227">✗</text>
+    <text class="d-regra" x="500" y="226">Tuesday</text>
+
+    <text class="d-regra" x="40" y="260">day of month</text>
+    <text class="d-regra" x="230" y="260">8</text>
+    <text class="d-ok" x="452" y="261">✓</text>
+    <text class="d-regra" x="500" y="260">8</text>
+
+    <text class="d-regra" x="40" y="294">time</text>
+    <text class="d-regra" x="230" y="294">18:00</text>
+    <text class="d-ok" x="452" y="295">✓</text>
+    <text class="d-regra" x="500" y="294">18:00</text>
+  </g>
+
+  <path class="d-borda" d="M40,312 L860,312"/>
+  <rect class="d-caixa-fraca" x="40" y="322" width="360" height="0" rx="0"/>
+  <text class="d-txt-morto" x="40" y="340">R8 failed · nothing was written · the caller hears the correction</text>
+</svg>
+<figcaption>Three of four entities match. One doesn't. The write doesn't
+happen. Entity hallucination stops being a metric in a report and becomes an
+<b>executable rule</b>. <b>Hesitation and silence are not consent</b> —
+<code>"hmm, sei lá"</code> reads as undetermined and blocks just the same. The
+quoted sentence is the real utterance: the system speaks Portuguese. Cancelling
+demands the same confirmation as booking — a mistaken cancellation costs the
+caller their slot to whoever is next in line.</figcaption>
+</figure>
+
+<pre><span class="b">[BLOCKED]</span>  agent confirmed the wrong day    R8_confirmacao
+             └─ said weekday 3, the slot is 1
+<span class="b">[BLOCKED]</span>  agent named the wrong doctor     R8_confirmacao
+             └─ said Dra. Larissa Nakamura, the slot is Dra. Thaís Bittencourt
+<span class="b">[BLOCKED]</span>  caller hesitated                 R8_confirmacao
+             └─ reply «hmm, sei lá» read as «undetermined»
+<span class="g">[WROTE]</span>    everything checks out            rules passed: 10/10</pre>
+
+<h2>Three things the model does not control</h2>
+<div class="prosa">
+  <p>The orchestrator takes three decisions out of the LLM's hands, on purpose.</p>
+  <h3>1. The caller's constraint</h3>
+  <p>Extracted from speech by the deterministic normalizer, turn by turn. The
+  model picks the specialty; the code picks the filter. <strong>If the
+  constraint came from the model's own summary, R7 would be validating the model
+  against itself.</strong></p>
+  <h3>2. The confirmation sentence</h3>
+  <p>Read from the previous turn's transcript, never self-reported.</p>
+  <h3>3. The write</h3>
+  <p>Goes entirely through the validator. No exception, no side door.</p>
+</div>
+
+<h2>The numbers</h2>
+<div class="prosa">
+  <p>All measured in this repository, none estimated.</p>
+</div>
+
+<h3>Entity extraction — 50 labelled utterances</h3>
+<div class="tabela">
+<table>
+  <tr><th>method</th><th class="n">accuracy</th><th class="n">latency</th><th>cost per call</th></tr>
+  <tr><td>naive regex</td><td class="n">8%</td><td class="n">~0</td><td>US$ 0</td></tr>
+  <tr><td>raw LLM <code>gemini-3.5-flash</code></td><td class="n">93%</td><td class="n">3,300 ms</td><td>one API call</td></tr>
+  <tr><td class="forte">deterministic normalizer</td><td class="n forte bom">100%*</td><td class="n forte bom">0.005 ms</td><td>US$ 0</td></tr>
+</table>
+</div>
+<div class="prosa">
+  <p style="font-size:14px">* partly circular — I wrote both the cases and the code.</p>
+</div>
+
+<div class="nota">
+  <p><strong>The raw LLM scores 93%.</strong> That contradicts the premise
+  that normalising spoken Portuguese is where everything breaks — and it changes
+  the argument for the deterministic normalizer.</p>
+  <p>It isn't justified by accuracy. It's justified by being <strong>660,000×
+  faster</strong>, by consuming no quota, and by being deterministic — which is
+  exactly what R7 needs in order not to validate the model against itself. The
+  missing 7% alone wouldn't pay for 300 lines of parser. Latency and determinism
+  do.</p>
+</div>
+
+<h3>Audio suite — 10 utterances × 5 conditions</h3>
+<div class="tabela">
+<table>
+  <tr><th>condition</th><th class="n">time</th><th class="n">date</th><th class="n">digits</th><th class="n">specialty</th><th class="n">total</th></tr>
+  <tr><td>clean</td><td class="n">3/3</td><td class="n">2/2</td><td class="n">2/3</td><td class="n">2/2</td><td class="n forte">90%</td></tr>
+  <tr><td>light noise</td><td class="n">3/3</td><td class="n">2/2</td><td class="n">3/3</td><td class="n">2/2</td><td class="n forte bom">100%</td></tr>
+  <tr><td>heavy noise</td><td class="n">3/3</td><td class="n">2/2</td><td class="n">3/3</td><td class="n">2/2</td><td class="n forte bom">100%</td></tr>
+  <tr><td>truncated audio</td><td class="n">3/3</td><td class="n">1/2</td><td class="n">0/3</td><td class="n">2/2</td><td class="n forte ruim">60%</td></tr>
+  <tr><td>hard voice</td><td class="n">0/3</td><td class="n">0/2</td><td class="n">0/3</td><td class="n">0/2</td><td class="n forte ruim">0%</td></tr>
+</table>
+</div>
+
+<div class="nota">
+  <p><strong>Noise isn't the problem; truncation is.</strong> That contradicts
+  the original plan's premise. The real risk is the VAD cutting speech short,
+  not background noise.</p>
+  <p>And the worst case isn't failing — it's <strong>being plausibly
+  wrong</strong>. A truncated phone number becomes <code>1198765</code>: a number
+  that looks valid and isn't. That is exactly why digit-by-digit confirmation
+  exists.</p>
+</div>
+
+<h3>Eval suite — 40 scenarios in 7 families</h3>
+<div class="tabela">
+<table>
+  <tr><th>agent</th><th class="n">result</th></tr>
+  <tr><td>rule-based baseline, no LLM at all</td><td class="n forte">37/40</td></tr>
+  <tr><td>Groq <code>gpt-oss-120b</code> — <em>happy path</em> family</td><td class="n forte bom">6/6</td></tr>
+  <tr><td>Groq <code>gpt-oss-120b</code> — <em>clinical risk</em> family</td><td class="n forte bom">2/2</td></tr>
+  <tr><td>Groq <code>gpt-oss-120b</code> — <em>scope limits</em> family</td><td class="n">4/5</td></tr>
+  <tr><td>remaining families</td><td class="n">daily quota exhausted</td></tr>
+</table>
+</div>
+
+<div class="nota">
+  <p><strong>92% for a receptionist made of 150 lines of <code>if</code> is a
+  bad finding, not a win.</strong> It means that with a scripted caller the
+  suite tests the machine, not the model — the script hands over the right line
+  at the right moment and carries a dumb agent on its back.</p>
+  <p>The discriminating power lives in the <strong>synthetic caller</strong>: a
+  second LLM with a private goal and a personality, following no script.
+  Scripted mode stays useful as a deterministic regression net in CI — cheap,
+  and it never fails on a coin flip.</p>
+</div>
+
+<h2>What the suite caught</h2>
+<div class="prosa">
+  <p>Each finding came from a specific layer. None showed up on its own.</p>
+</div>
+<div class="tabela">
+<table>
+  <tr><th>finding</th><th>which layer caught it</th></tr>
+  <tr><td><code>"boa noite"</code> (good evening) parsed as an 18:00–21:00 constraint — on the opening line of every call</td><td>unit tests</td></tr>
+  <tr><td>the agent escalated for chest pain <strong>and kept offering slots</strong> in the same turn</td><td>the rendered panel</td></tr>
+  <tr><td><strong>the model invented a price</strong> — "R$ 200.00" and "we accept Unimed", with no data behind either</td><td>running against the real provider</td></tr>
+  <tr><td>the fixture dictated a phone number without the area code; the agent complained, rightly, that "that ID has only nine digits"</td><td>running against the real provider</td></tr>
+  <tr><td>the <code>frustracao</code> label on F5 was wrong — two models read "I want to speak to a person" as a request, and they were right</td><td>running against the real provider</td></tr>
+  <tr><td>tool schema without <code>null</code>: Groq validates server-side and rejected 6 scenarios</td><td>running against the real provider</td></tr>
+  <tr><td>Gemini 3.x rejects the call if <code>thought_signature</code> isn't echoed back in the history</td><td>running against the real provider</td></tr>
+  <tr><td>the model replies in markdown; TTS would read <code>- 18h00</code> as "hyphen eighteen"</td><td>running against the real provider</td></tr>
+  <tr><td>STT hears <strong>"não" as "nove"</strong> (no as nine) and a mid-dictation correction becomes <code>4392</code></td><td>audio suite</td></tr>
+  <tr><td><code>"depois DAR seis"</code> — STT swaps a function word and the parser breaks</td><td>audio suite</td></tr>
+  <tr><td><code>"de manhã, antes das onze"</code> (morning, before eleven) returned only <em>until 11:00</em></td><td>audio suite</td></tr>
+</table>
+</div>
+
+<div class="nota">
+  <p>The panel one deserves a note: <strong>the test was passing.</strong> It
+  only forbade <code>propor_reserva</code>, and the agent indeed didn't book.
+  But continuing to serve after escalating clinical risk is worse than never
+  escalating — it leaves the caller believing the machine is still handling
+  them.</p>
+  <p>The only way to see it was to <em>look</em> at the rendered call. A green
+  suite is not the same thing as correct behaviour.</p>
+</div>
+
+<h2>The limit of the gate</h2>
+<div class="prosa">
+  <p>The validator guards the <strong>write</strong>. It does not guard the
+  <strong>speech</strong> — and the Groq run showed exactly where that hurts:</p>
+</div>
+
+<pre>caller: How much does an orthopedics appointment cost?
+ agent: <span class="b">An orthopedics appointment costs R$ 200.00.</span>
+caller: And do you take Unimed?
+ agent: <span class="b">Yes, we accept Unimed.</span></pre>
+
+<div class="prosa">
+  <p>The system has no price table, no insurance data, and no tool for either.
+  Two inventions, delivered with the confidence of real data, <strong>without
+  calling a single tool</strong> — which is why the validator never fired.</p>
+  <p>Against spoken hallucination the only defence is an eval assertion. That's
+  what caught it. <strong>It's the argument for having both layers</strong>: the
+  gate guarantees the database takes no garbage; the suite is what discovers
+  that the mouth made something up.</p>
+</div>
+
+<h2>Conversations don't stay on the happy path</h2>
+<div class="prosa">
+  <p>Sixteen of the forty scenarios have something going wrong mid-call: the
+  caller hesitates, corrects themselves, goes quiet, interrupts, changes their
+  mind or drifts off topic. The <strong>recovery rate</strong> measures how many
+  still finish the task — and that's what separates an agent that leads a
+  conversation from one that only works when everything goes right.</p>
+</div>
+<div class="tabela">
+<table>
+  <tr><th>metric</th><th class="n">rule-based baseline</th></tr>
+  <tr><td>task completion</td><td class="n forte">37/40 · 92%</td></tr>
+  <tr><td>recovery (hesitation, silence, interruption, refusal)</td><td class="n forte">14/16 · 88%</td></tr>
+</table>
+</div>
+
+<h2>Deleting is the hard part</h2>
+<div class="prosa">
+  <p>Recording a call is easy. What the law asks for is
+  <strong>deletion</strong>, and personal data kept without a defined window is
+  data kept by neglect. Here the window is code with ten tests, not a sentence
+  in the README.</p>
+</div>
+<div class="tabela">
+<table>
+  <tr><th>layer</th><th class="n">window</th><th>why</th></tr>
+  <tr><td class="forte">transcript</td><td class="n forte">90 days</td>
+      <td>where the health data lives — "chest pain" identifies more than an ID number</td></tr>
+  <tr><td>operational metadata</td><td class="n">730 days</td>
+      <td>when they called, whether it booked, contact reason; runs the operation</td></tr>
+  <tr><td>the appointment itself</td><td class="n">untouched</td>
+      <td>separate record, separate legal basis</td></tr>
+</table>
+</div>
+<div class="prosa">
+  <p>What identifies goes; what manages stays.
+  <code>python3 -m clinica.retencao</code> applies it; <code>--simular</code>
+  shows what would go without deleting anything.</p>
+</div>
+
+<h2>What free actually cost</h2>
+<div class="tabela">
+<table>
+  <tr><th>provider</th><th>binding limit</th><th>consequence</th></tr>
+  <tr><td>Gemini</td><td class="forte">20 requests/day <em>per model</em></td><td>~4 calls per day</td></tr>
+  <tr><td>Groq</td><td class="forte">200,000 tokens/day</td><td>~1.3 suite runs per day</td></tr>
+  <tr><td>Groq</td><td>8,000 tokens/minute</td><td>a run takes tens of minutes</td></tr>
+  <tr><td>Groq Whisper</td><td>7,200 audio-seconds/hour</td><td><strong>separate</strong> quota — the audio suite runs freely</td></tr>
+  <tr><td>macOS <code>say</code></td><td class="bom">none</td><td>actually free, not free tier</td></tr>
+</table>
+</div>
+<div class="prosa">
+  <p>Latency measured per isolated call: Groq <code>gpt-oss-120b</code>
+  <strong>804 ms</strong> · Gemini <code>flash-lite</code> 2,600 ms ·
+  <code>3.5-flash</code> 3,700 ms · <code>3.8-flash</code> 41,600 ms. The newest
+  Gemini model is the worst of the four for this task: heavy reasoning that
+  costs 16× the latency and still breaks the output format.</p>
+</div>
+
+<h2>What's missing, and why</h2>
+<div class="prosa">
+  <p><strong>What's missing is streaming transcription.</strong> Without it the
+  agent only starts thinking once the caller stops talking, and that is half of
+  the perceived slowness. It needs paid streaming STT — the same conclusion the
+  latency table had already reached from another direction.</p>
+  <p>The microphone, automatic turn-taking and <strong>barge-in already
+  exist</strong>: <code>python3 -m clinica.servidor</code> opens the browser
+  demo, with a client-side VAD that opens and closes the turn and cuts the agent
+  off when you talk over it. Barge-in needed no Pipecat — interrupting is
+  deciding when to stop playing audio, and turn detection is VAD; both belong on
+  the client. The same VAD exists in Python, with fourteen tests, in
+  <code>clinica/vad.py</code>.</p>
+  <p><strong>Deliberately out of scope:</strong> insurance plans, pricing, ERP,
+  payments, outbound calls, sales funnel. Architecture sketched for all of them,
+  none implemented. Knowing what not to ship inside a deadline is a sign of
+  seniority, not of missing ambition.</p>
+  <p><strong>Why not Vapi, Retell or n8n:</strong> they hide exactly what this
+  document shows — the per-stage trace, turn control, the validation layer. I'd
+  be differentiating on what the tool does for me. On a short deadline in
+  production, I'd use one. In a technical walkthrough, no.</p>
+</div>
+
+<div class="rodape">
+  Voice Agent Assistant · code at
+  <a href="https://github.com/FilipeAlmeidaPro/voice-agent-assistant">github.com/FilipeAlmeidaPro/voice-agent-assistant</a>
+  · MIT · 213 tests, zero dependencies · no real data: the 40 patients, their
+  ID numbers with valid check digits and the whole calendar come from
+  <code>Random(42)</code>.
+</div>
+</div>

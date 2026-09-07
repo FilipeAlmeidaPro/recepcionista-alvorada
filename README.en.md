@@ -7,7 +7,7 @@ and the 40 patients, their ID numbers and the whole calendar come from
 constraint, queries a real calendar, offers a slot, confirms out loud, and
 writes — or escalates to a human when that's the right call.
 
-*[Versão em português](README.md)* · **[Architecture →](https://claude.ai/code/artifact/163f86c8-fe48-46af-8029-563ef00dbcb7)** · **[Who checks whom →](https://claude.ai/code/artifact/ba4ef3ef-7ceb-4c8b-8c12-b49c76225e7f)** ([sources](docs/), in Portuguese)
+*[Versão em português](README.md)* · **[Architecture →](https://claude.ai/code/artifact/8e4cad9f-5b25-4a44-b1da-aa158f092b54)** · **[Who checks whom →](https://claude.ai/code/artifact/07ffe974-f74d-48f3-80cc-4c072503a993)** ([sources](docs/))
 
 The project chases a single scenario, in depth:
 
