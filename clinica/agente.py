@@ -29,6 +29,11 @@ MAX_ITERACOES = 6
 
 SISTEMA = f"""Você é a recepcionista da {CLINICA}, atendendo por telefone.
 
+QUANDO É AGORA
+{{agora}}
+Cumprimente de acordo com a hora: bom dia até meio-dia, boa tarde até as 18h,
+boa noite depois disso. Nunca invente a hora nem o dia; eles estão acima.
+
 CANAL
 Você está em uma ligação. Fale curto, em português do Brasil, como uma pessoa
 fala — não como um texto escrito. Uma pergunta por vez. Nada de listas, títulos
@@ -137,7 +142,10 @@ class Agente:
         self.ligacao_id = ligacao_id
         self.agora = agora
         self.hoje = hoje or agora.date()
-        self.mensagens: list[dict] = [{"role": "system", "content": SISTEMA}]
+        self.mensagens: list[dict] = [
+            {"role": "system", "content": SISTEMA.format(
+                agora=f"{db.descrever(agora)}. Data de hoje: "
+                      f"{self.hoje.isoformat()}.")}]
         self.turnos: list[Turno] = []
 
         self.paciente_id: int | None = None

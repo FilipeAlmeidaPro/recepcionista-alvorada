@@ -211,6 +211,37 @@ class TestPersistencia(BaseServidor):
         self.assertIn(str(self.tmp.name), str(self.banco))
 
 
+class TestSaudacao(BaseServidor):
+    def test_cumprimenta_pela_hora_e_nao_por_chute(self):
+        """Estava fixo em "boa noite" no código. Às 16h a clínica dava boa
+        noite, e o prompt do modelo nunca dizia que horas eram."""
+        from datetime import datetime
+        from clinica.db import saudacao
+        self.assertEqual(saudacao(datetime(2026, 9, 7, 9, 0)), "Bom dia")
+        self.assertEqual(saudacao(datetime(2026, 9, 7, 16, 0)), "Boa tarde")
+        self.assertEqual(saudacao(datetime(2026, 9, 7, 21, 0)), "Boa noite")
+
+    def test_a_abertura_da_ligacao_usa_a_hora_de_agora(self):
+        from datetime import datetime
+        from clinica.db import saudacao
+        _c, corpo = self._pedir("/nova", dados=b"", metodo="POST")
+        fala = json.loads(corpo)["fala"]
+        self.assertIn(saudacao(datetime.now()).lower(), fala.lower())
+
+    def test_o_modelo_recebe_a_data_e_a_hora(self):
+        """Sem isso ele imita o que vê, e o que ele via era "boa noite"."""
+        from datetime import datetime
+        from clinica.agente import Agente
+        from clinica.provedor import ProvedorRoteirizado
+        agora = datetime(2026, 9, 7, 16, 30)
+        a = Agente(db.conectar(self.banco), ProvedorRoteirizado([]),
+                   ligacao_id="h", agora=agora, hoje=agora.date())
+        sistema = a.mensagens[0]["content"]
+        self.assertIn("16h30", sistema)
+        self.assertIn("2026-09-07", sistema)
+        self.assertIn("segunda-feira", sistema)
+
+
 class TestTraceDoValidador(BaseServidor):
     """A página precisa poder pintar um bloqueio. Se o contrato mudar sem o
     trace acompanhar, a demo mostra sucesso onde houve recusa."""

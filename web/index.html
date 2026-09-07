@@ -358,7 +358,33 @@ async function novaLigacao(){
   }catch(e){ falha("Não consegui abrir a ligação: " + e.message); }
 }
 
+/** Diz o que está faltando, em vez de "não consegui".
+ *  O Safari não trata http://127.0.0.1 como contexto seguro e simplesmente não
+ *  expõe navigator.mediaDevices — o erro vira "undefined is not an object", que
+ *  não ajuda ninguém. */
+function diagnosticar(){
+  if (!window.isSecureContext && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname))
+    return "Esta página não está num contexto seguro. Abra por localhost ou use HTTPS.";
+  if (!navigator.mediaDevices?.getUserMedia)
+    return "Este navegador não libera o microfone por HTTP. O Chrome libera em " +
+           "127.0.0.1; o Safari exige HTTPS — rode com --https.";
+  if (!window.MediaRecorder)
+    return "Este navegador não tem MediaRecorder. Use Chrome ou Safari recente.";
+  return null;
+}
+
+const MOTIVO = {
+  NotAllowedError: "Você (ou o navegador) negou o microfone. Clique no ícone da " +
+                   "barra de endereço, permita o microfone e recarregue.",
+  NotFoundError: "Nenhum microfone encontrado neste computador.",
+  NotReadableError: "O microfone existe mas outro app está usando. Feche e recarregue.",
+  OverconstrainedError: "O microfone não aceita a configuração pedida.",
+  SecurityError: "O navegador bloqueou por segurança. Use HTTPS ou localhost.",
+};
+
 async function prepararMicrofone(){
+  const problema = diagnosticar();
+  if (problema) throw new Error(problema);
   const fluxo = await navigator.mediaDevices.getUserMedia({audio:{
     channelCount:1,
     // echoCancellation é o que impede o VAD de escutar a própria voz do
@@ -450,7 +476,12 @@ $("#maosLivres").addEventListener("change", () => {
 
 (async () => {
   try{ await prepararMicrofone(); }
-  catch(e){ falha("Preciso do microfone para atender. Libere o acesso e recarregue."); return; }
+  catch(e){
+    falha((MOTIVO[e.name] || e.message || "Não consegui abrir o microfone.") +
+          `  [${e.name || "erro"} · ${location.protocol}//${location.hostname}` +
+          ` · contexto ${window.isSecureContext ? "seguro" : "inseguro"}]`);
+    return;
+  }
   await novaLigacao();
 })();
 </script>

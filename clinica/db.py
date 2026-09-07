@@ -179,5 +179,15 @@ def descrever(quando: datetime) -> str:
             f"às {hora}")
 
 
+def saudacao(quando: datetime) -> str:
+    """Bom dia, boa tarde ou boa noite — pela hora, não por chute.
+
+    Estava fixo em "boa noite" no código do servidor, e o prompt do modelo
+    nunca dizia que horas eram. Às 16h a clínica dava boa noite.
+    """
+    hora = quando.hour
+    return "Bom dia" if hora < 12 else "Boa tarde" if hora < 18 else "Boa noite"
+
+
 def parse(momento: str) -> datetime:
     return datetime.strptime(momento, FORMATO)

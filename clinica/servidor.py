@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -32,7 +33,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from clinica import db, retencao
-from clinica.agente import Agente
+from clinica.agente import CLINICA, Agente
 from clinica.provedor import provedor_padrao
 from clinica.voz import TAXA, SinteseMacOS, TranscricaoGroq, duracao
 
@@ -102,8 +103,8 @@ class Ligacao(BaseHTTPRequestHandler):
             _ligacoes[ligacao_id] = Agente(
                 conn, self.servidor_voz["provedor"],
                 ligacao_id=ligacao_id, agora=agora, hoje=agora.date())
-        abertura = ("Clínica Alvorada, boa noite. Esta chamada é gravada. "
-                    "Em que posso ajudar?")
+        abertura = (f"{CLINICA}, {db.saudacao(agora).lower()}. Esta chamada é "
+                    f"gravada. Em que posso ajudar?")
         audio = self.servidor_voz["tts"].falar(
             abertura, Path(tempfile.gettempdir()) / f"{ligacao_id}-abertura.wav")
         self._json({"ligacao": ligacao_id, "fala": abertura,
@@ -173,11 +174,34 @@ class Ligacao(BaseHTTPRequestHandler):
         })
 
 
+def _certificado() -> Path:
+    """Certificado autoassinado, gerado com o openssl que já vem no macOS.
+
+    Existe por um motivo só: o Safari não trata http://127.0.0.1 como contexto
+    seguro e não expõe `navigator.mediaDevices`. O Chrome trata, e por isso a
+    demo funciona nele sem isto.
+    """
+    destino = Path(tempfile.gettempdir()) / "voice-agent-assistant.pem"
+    if destino.exists():
+        return destino
+    subprocess.run(
+        ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+         "-keyout", str(destino), "-out", str(destino), "-days", "30",
+         "-subj", "/CN=127.0.0.1",
+         "-addext", "subjectAltName=IP:127.0.0.1,DNS:localhost"],
+        check=True, capture_output=True)
+    destino.chmod(0o600)
+    return destino
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="Demo da recepcionista no navegador.")
     p.add_argument("--porta", type=int, default=8800)
     p.add_argument("--voz", default="Luciana")
     p.add_argument("--banco", default=None, help="caminho do banco (padrão: data/clinica.db)")
+    p.add_argument("--https", action="store_true",
+                   help="sobe em HTTPS com certificado autoassinado — o Safari "
+                        "só libera o microfone assim")
     args = p.parse_args()
 
     provedor = provedor_padrao()
@@ -194,11 +218,31 @@ def main() -> int:
         print(e, file=sys.stderr)
         return 2
 
+    # Garante o schema antes de atender a primeira ligação, e não na décima:
+    # banco antigo não tem a tabela `ligacoes`, e sem ela a retenção não teria
+    # o que apagar.
+    inicial = db.conectar(args.banco)
+    db.criar_schema(inicial)
+    inicial.close()
+
+    politica = retencao.politica()
     servidor = ThreadingHTTPServer(("127.0.0.1", args.porta), Ligacao)
+    esquema = "http"
+    if args.https:
+        cert = _certificado()
+        contexto = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        contexto.load_cert_chain(cert)
+        servidor.socket = contexto.wrap_socket(servidor.socket, server_side=True)
+        esquema = "https"
     # flush explícito: sem ele o banner só aparece quando o processo morre,
     # e quem roda fica sem saber se subiu.
     print(f"Voice Agent Assistant · {provedor.nome} · voz {args.voz}", flush=True)
-    print(f"  http://127.0.0.1:{args.porta}\n  ctrl+c para parar", flush=True)
+    print(f"  transcrição retida por {politica['transcricao_dias']} dias · "
+          f"metadados por {politica['metadados_dias']}", flush=True)
+    print(f"  {esquema}://127.0.0.1:{args.porta}\n  ctrl+c para parar", flush=True)
+    if args.https:
+        print("  o navegador vai avisar do certificado autoassinado — aceite",
+              flush=True)
     try:
         servidor.serve_forever()
     except KeyboardInterrupt:
