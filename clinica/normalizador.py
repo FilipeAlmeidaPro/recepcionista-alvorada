@@ -157,7 +157,20 @@ class Restricao:
         }.items() if v is not None}
 
 
-def _ler_hora(tokens, i, permitir_minutos=True) -> tuple[tuple[int, int] | None, int, bool]:
+def _periodo_dominante(tokens) -> str | None:
+    """O período dito em qualquer ponto da frase, não só colado no número.
+
+    "à noite, antes das oito" são oito da NOITE. Sem isto o 8 virava 08:00 e a
+    restrição saía 18:00–08:00 — impossível.
+    """
+    for i, tk in enumerate(tokens):
+        if tk in _PERIODOS and (i == 0 or tokens[i - 1] in _PREPOSICOES):
+            return tk
+    return None
+
+
+def _ler_hora(tokens, i, permitir_minutos=True,
+              periodo_padrao=None) -> tuple[tuple[int, int] | None, int, bool]:
     while i < len(tokens) and tokens[i] in _LIGACOES:
         i += 1
     if i >= len(tokens):
@@ -191,6 +204,8 @@ def _ler_hora(tokens, i, permitir_minutos=True) -> tuple[tuple[int, int] | None,
     periodo = tokens[j] if j < len(tokens) and tokens[j] in _PERIODOS else None
     if periodo:
         prox = j + 1
+    elif periodo_padrao:
+        periodo = periodo_padrao      # o período da frase vale para esta hora
 
     ambiguo = False
     if periodo in ("tarde", "noite") and hora < 12:
@@ -206,61 +221,74 @@ def _hhmm(h: int, m: int) -> str:
     return f"{h:02d}:{m:02d}"
 
 
-def _restricao_horaria(tokens) -> tuple[str | None, str | None, bool]:
+def _restricao_horaria(tokens) -> tuple[str | None, str | None, bool, set[int]]:
+    """Devolve também os índices consumidos.
+
+    Sem isso, o "da tarde" de "depois das seis da tarde" era usado duas vezes:
+    uma para desambiguar a hora (6 → 18) e outra como faixa do período — o que
+    produzia a restrição impossível 18:00–17:59, com zero horários possíveis.
+    """
     texto = " ".join(tokens)
+    dominante = _periodo_dominante(tokens)
     hora_min = hora_max = None
     ambigua = False
+    consumidos: set[int] = set()
     i = 0
     while i < len(tokens):
         tk = tokens[i]
         if tk == "entre":
-            a, prox, amb_a = _ler_hora(tokens, i + 1, permitir_minutos=False)
+            a, prox, amb_a = _ler_hora(tokens, i + 1, False, dominante)
             if a:
                 while prox < len(tokens) and tokens[prox] in {"e", "a", "as", "ate"}:
                     prox += 1
-                b, prox, amb_b = _ler_hora(tokens, prox, permitir_minutos=False)
+                b, prox, amb_b = _ler_hora(tokens, prox, False, dominante)
                 if b:
                     hora_min, hora_max = _hhmm(*a), _hhmm(*b)
                     # "entre duas e quatro DA TARDE": o período fecha as duas
                     # pontas, então só é ambíguo quando nenhuma delas tem período.
                     ambigua = ambigua or (amb_a and amb_b)
+                    consumidos.update(range(i, prox))
                     i = prox
                     continue
         elif tk in _MARC_MIN:
-            h, prox, amb = _ler_hora(tokens, i + 1)
+            h, prox, amb = _ler_hora(tokens, i + 1, True, dominante)
             if h:
-                hora_min, ambigua, i = _hhmm(*h), ambigua or amb, prox
+                hora_min, ambigua = _hhmm(*h), ambigua or amb
+                consumidos.update(range(i, prox))
+                i = prox
                 continue
         elif tk in _MARC_MAX:
-            h, prox, amb = _ler_hora(tokens, i + 1)
+            h, prox, amb = _ler_hora(tokens, i + 1, True, dominante)
             if h:
-                hora_max, ambigua, i = _hhmm(*h), ambigua or amb, prox
+                hora_max, ambigua = _hhmm(*h), ambigua or amb
+                consumidos.update(range(i, prox))
+                i = prox
                 continue
         i += 1
     if hora_min or hora_max:
-        return hora_min, hora_max, ambigua
+        return hora_min, hora_max, ambigua, consumidos
 
     # Sem marcador de faixa: horário exato ("às oito da manhã", "ao meio-dia").
     if "meio dia" in texto:
-        return "12:00", "12:00", False
+        return "12:00", "12:00", False, set(range(len(tokens)))
     if "meia noite" in texto:
-        return "00:00", "00:00", False
+        return "00:00", "00:00", False, set(range(len(tokens)))
     for i, tk in enumerate(tokens):
         if tk in {"as", "a", "ao", "aos"}:
-            h, _prox, amb = _ler_hora(tokens, i + 1)
+            h, prox, amb = _ler_hora(tokens, i + 1, True, dominante)
             if h:
-                return _hhmm(*h), _hhmm(*h), amb
+                return _hhmm(*h), _hhmm(*h), amb, set(range(i, prox))
 
     # Período do dia ("de manhã", "só à noite"). Exige preposição antes —
     # senão "boa noite" e "boa tarde", que abrem literalmente toda ligação,
     # viravam restrição de horário em silêncio.
     for i, tk in enumerate(tokens):
         if tk in _PERIODOS and (i == 0 or tokens[i - 1] in _PREPOSICOES):
-            return (*_PERIODOS[tk], False)
-    return None, None, False
+            return (*_PERIODOS[tk], False, {i})
+    return None, None, False, set()
 
 
-def _completar_com_periodo(tokens, hora_min, hora_max):
+def _completar_com_periodo(tokens, hora_min, hora_max, consumidos):
     """'de manhã, antes das onze' são duas informações, não uma.
 
     O limite explícito manda na sua ponta; o período preenche a que sobrou.
@@ -270,7 +298,9 @@ def _completar_com_periodo(tokens, hora_min, hora_max):
     if hora_min and hora_max:
         return hora_min, hora_max
     for i, tk in enumerate(tokens):
-        if tk in _PERIODOS and (i == 0 or tokens[i - 1] in _PREPOSICOES):
+        # Um período já usado para desambiguar a hora não vale de novo como faixa.
+        if (tk in _PERIODOS and i not in consumidos
+                and (i == 0 or tokens[i - 1] in _PREPOSICOES)):
             inicio, fim = _PERIODOS[tk]
             return hora_min or inicio, hora_max or fim
     return hora_min, hora_max
@@ -352,9 +382,15 @@ def interpretar_restricao(texto: str, hoje: date | None = None) -> Restricao:
     """Converte a fala do paciente em filtros para `consultar_agenda`."""
     hoje = hoje or date.today()
     tokens = tokenizar(texto)
-    hora_min, hora_max, ambigua = _restricao_horaria(tokens)
-    hora_min, hora_max = _completar_com_periodo(tokens, hora_min, hora_max)
+    hora_min, hora_max, ambigua, consumidos = _restricao_horaria(tokens)
+    hora_min, hora_max = _completar_com_periodo(tokens, hora_min, hora_max, consumidos)
     data_inicio, data_fim, dias = _restricao_temporal(tokens, hoje)
+
+    if hora_min and hora_max and hora_min > hora_max:
+        # Não deveria acontecer — há um teste de propriedade contra isso. Se
+        # acontecer, largar o limite derivado de período é melhor do que
+        # entregar ao validador uma restrição com zero horários por definição.
+        hora_max, ambigua = None, True
 
     return Restricao(hora_min, hora_max, dias, data_inicio, data_fim, ambigua,
                      descrever_restricao(hora_min, hora_max, dias,

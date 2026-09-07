@@ -68,6 +68,36 @@ class TestRestricaoHoraria(unittest.TestCase):
         self.assertEqual(interpretar_restricao("depois das seis e meia", HOJE).hora_min, "18:30")
         self.assertEqual(interpretar_restricao("às 18h30", HOJE).hora_min, "18:30")
 
+    def test_periodo_usado_na_hora_nao_vira_faixa_tambem(self):
+        """Regressão: o "da tarde" de "depois das seis da tarde" era usado duas
+        vezes — para desambiguar 6→18h e, de novo, como faixa do período. Saía
+        18:00–17:59: uma restrição impossível, com zero horários por definição,
+        e a suíte inteira passando."""
+        r = interpretar_restricao("depois das seis da tarde", HOJE)
+        self.assertEqual((r.hora_min, r.hora_max), ("18:00", None))
+        r = interpretar_restricao("a partir das sete da noite", HOJE)
+        self.assertEqual((r.hora_min, r.hora_max), ("19:00", None))
+
+    def test_nenhuma_restricao_falada_pode_ser_impossivel(self):
+        """Propriedade, não exemplo: se hora_min > hora_max, a consulta devolve
+        zero por construção e o agente fica sem nada verdadeiro para oferecer."""
+        falas = [
+            "depois das seis da tarde", "a partir das sete da noite",
+            "de manhã, antes das onze", "de manhã, depois das nove",
+            "só consigo depois das seis", "antes das cinco", "de manhã",
+            "só à noite", "entre duas e quatro da tarde", "às oito da manhã",
+            "ao meio-dia", "às 18h30", "depois das seis e meia", "até as onze",
+            "de tarde, depois das duas", "à noite, antes das oito",
+            "pela manhã", "só consigo depois dar seis", "entre nove e onze",
+        ]
+        for fala in falas:
+            with self.subTest(fala=fala):
+                r = interpretar_restricao(fala, HOJE)
+                if r.hora_min and r.hora_max:
+                    self.assertLessEqual(
+                        r.hora_min, r.hora_max,
+                        f"«{fala}» virou {r.hora_min}–{r.hora_max}, impossível")
+
     def test_periodo_combina_com_limite_explicito(self):
         """'de manhã, antes das onze' são duas informações, não uma. Sem isto a
         restrição saía só como 'até as 11h' e 7h da manhã do dia seguinte

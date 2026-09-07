@@ -106,7 +106,7 @@ def interpretar_resposta(resposta: str) -> str:
 def extrair_entidades(frase: str) -> dict:
     """Entidades que o agente disse em voz alta: hora, dia da semana, dia do mês."""
     tokens = tokenizar(frase or "")
-    hora_min, hora_max, _ = _restricao_horaria(tokens)
+    hora_min, hora_max, _amb, _consumidos = _restricao_horaria(tokens)
     hora = hora_min if hora_min and hora_min == hora_max else (hora_min or hora_max)
     if hora is None:
         bruto = _HORA_CRUA.search(frase or "")
