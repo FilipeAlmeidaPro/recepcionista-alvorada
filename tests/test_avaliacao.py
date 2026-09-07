@@ -10,6 +10,7 @@ import unittest
 from datetime import datetime
 
 from avaliacao.cenarios import CENARIOS, POR_ID, Expectativa
+from avaliacao.paciente import _sem_sentinela
 from avaliacao.runner import AGORA, _banco, _contexto, _integridade, avaliar, executar
 from avaliacao.simulado import RecepcionistaSimulada
 from clinica.agente import Agente
@@ -131,6 +132,53 @@ class TestIntegridade(unittest.TestCase):
         problemas = _integridade(conn)
         self.assertTrue(problemas)
         self.assertIn("slot não ocupado", problemas[0])
+
+
+class TestPacienteSintetico(unittest.TestCase):
+    """O modo sintético nunca tinha rodado, e a primeira rodada expôs dois
+    defeitos meus antes de conseguir testar o agente."""
+
+    def test_sentinela_no_fim_da_frase_encerra(self):
+        """O modelo escreve "Obrigada! ENCERRAR", não "ENCERRAR". Com
+        startswith a ligação nunca terminava e o agente repetia a mesma
+        resposta até o teto de turnos."""
+        self.assertEqual(_sem_sentinela("Obrigada! ENCERRAR"), "Obrigada!")
+        self.assertEqual(_sem_sentinela("Perfeito.\nENCERRAR"), "Perfeito.")
+        self.assertIsNone(_sem_sentinela("ENCERRAR"))
+        self.assertIsNone(_sem_sentinela("   encerrar  "))
+
+    def test_fala_normal_passa_intacta(self):
+        self.assertEqual(_sem_sentinela("Sim, pode marcar."), "Sim, pode marcar.")
+        self.assertIsNone(_sem_sentinela(""))
+
+    def test_objetivo_carrega_a_especialidade(self):
+        """O objetivo era só o título do cenário — que não diz a especialidade.
+        Na primeira rodada o paciente pediu dermatologia num cenário de
+        ortopedia, e o teste mediu outra coisa."""
+        objetivo = POR_ID["A1"].objetivo_do_paciente().lower()
+        self.assertIn("ortopedista", objetivo)
+        self.assertIn("depois das seis", objetivo)
+
+    def test_todo_cenario_tem_objetivo_com_conteudo(self):
+        for c in CENARIOS:
+            with self.subTest(cenario=c.id):
+                objetivo = c.objetivo_do_paciente()
+                self.assertGreater(len(objetivo), len(c.titulo) + 40,
+                                   f"{c.id}: objetivo vago demais para o sintético")
+
+    def test_o_briefing_manda_nao_copiar(self):
+        self.assertIn("nunca copiando", POR_ID["A1"].objetivo_do_paciente())
+
+
+class TestLacoDeConversa(unittest.TestCase):
+    def test_agente_repetindo_a_mesma_frase_encerra_a_ligacao(self):
+        """Laço não é resultado de teste. O baseline repetiu oito vezes a
+        mesma resposta contra o paciente sintético."""
+        travado = ProvedorRoteirizado(
+            [Resposta(texto="Não tenho nada dentro do que você pediu.")] * 12)
+        r = executar(POR_ID["A1"], travado)
+        self.assertLessEqual(r.resultado["turnos"], 4,
+                             "deveria parar ao detectar repetição")
 
 
 class TestFixture(unittest.TestCase):

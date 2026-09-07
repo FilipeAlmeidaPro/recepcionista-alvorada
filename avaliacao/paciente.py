@@ -71,6 +71,18 @@ recepcionista já resolveu o que você queria, ou se ficou claro que não vai
 resolver, encerre dizendo apenas: ENCERRAR"""
 
 
+SENTINELA = "ENCERRAR"
+
+
+def _sem_sentinela(fala: str) -> str | None:
+    """Devolve a fala sem o sentinela, ou None se não sobrou nada a dizer."""
+    if SENTINELA not in fala.upper():
+        return fala or None
+    corte = fala.upper().index(SENTINELA)
+    restante = fala[:corte].strip()
+    return restante or None
+
+
 class PacienteSintetico:
     """Um segundo agente conversando com o primeiro."""
 
@@ -95,4 +107,7 @@ class PacienteSintetico:
         fala = (resposta.texto or "").strip()
         self.mensagens.append({"role": "assistant", "content": fala})
         self._turnos += 1
-        return None if fala.upper().startswith("ENCERRAR") or not fala else fala
+        # O modelo põe ENCERRAR no fim da frase, não no começo: "Obrigada!
+        # ENCERRAR". Com startswith a ligação nunca terminava e o agente
+        # ficava repetindo a mesma resposta até o teto de turnos.
+        return _sem_sentinela(fala)

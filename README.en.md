@@ -391,6 +391,36 @@ My fixture built the phone number without the area code — nine digits, which
 again. Right once more. Three tests now guard fixture realism, because
 unrealistic data makes a correct model look wrong.
 
+### The synthetic caller ran for the first time — and tested my harness
+
+The claim above (*"the discriminating power lives in the synthetic caller"*)
+went a long time without proof. I ran it, and the first run **never got to test
+the agent**: it exposed two defects of my own first.
+
+```
+caller: Hello! This is Thaís. I'd like to book an appointment.
+ agent: Which specialty do you need?
+caller: Dermatology, please.              ← scenario A1 is ORTHOPEDICS
+   …
+caller: That works, please confirm. Thanks! ENCERRAR
+ agent: I have nothing within what you asked for…   ← and seven more times
+```
+
+1. **The caller's goal was the scenario title** — "Booking with a time
+   constraint" — which doesn't name the specialty. The caller invented its own.
+   The `objetivo` field had existed from the start and had never been exercised.
+   The script is now a **briefing**: the caller pursues the same goal in its own
+   words.
+2. **The `ENCERRAR` sentinel was only detected at the start of a line**, and the
+   model writes `"Thanks! ENCERRAR"`. The call never ended.
+3. And one that's the agent's, not mine: **the baseline loops**, repeating the
+   same reply. The runner now ends the call on repetition — a loop is not a test
+   result.
+
+**The claim still has no proof.** What changed is that synthetic mode now works,
+with six tests covering both defects. Running it for real costs an entire daily
+quota, and that quota ran out on both models mid-attempt.
+
 ### Entity extraction — 50 labelled utterances
 
 | method | digits | time | date | name | specialty | **total** |

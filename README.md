@@ -380,6 +380,36 @@ repetir. Estava certo de novo. Três testes agora garantem que a fixture é
 realista, porque dado irrealista faz o modelo parecer errado quando ele
 acertou.
 
+### O paciente sintético rodou pela primeira vez — e testou o meu harness
+
+A afirmação acima (*"o poder discriminante mora no paciente sintético"*) ficou
+muito tempo sem prova. Rodei, e a primeira rodada **não conseguiu testar o
+agente**: expôs dois defeitos meus antes disso.
+
+```
+paciente: Alô, boa tarde! Aqui é a Thaís. Gostaria de marcar uma consulta.
+  agente: Qual especialidade você precisa?
+paciente: Dermatologia, por favor.          ← o cenário A1 é de ORTOPEDIA
+   …
+paciente: Serve, pode confirmar. Obrigada! ENCERRAR
+  agente: Não tenho nada dentro do que você pediu…   ← e mais sete vezes
+```
+
+1. **O objetivo do paciente era o título do cenário** — "Agendamento com
+   restrição de horário" —, que não diz a especialidade. O paciente inventou a
+   dele. O campo `objetivo` existia desde o início e nunca tinha sido
+   exercitado. Agora o roteiro vira **briefing**: o paciente persegue o mesmo
+   objetivo com as palavras dele.
+2. **O sentinela `ENCERRAR` só era detectado no início da frase**, e o modelo
+   escreve `"Obrigada! ENCERRAR"`. A ligação nunca terminava.
+3. E um do agente, não meu: **o baseline entra em laço**, repetindo a mesma
+   resposta. O runner agora encerra ao detectar repetição — laço não é
+   resultado de teste.
+
+**A afirmação continua sem prova.** O que mudou é que o modo sintético agora
+funciona, com seis testes cobrindo os dois defeitos. Rodar de verdade custa uma
+cota diária inteira, e ela acabou nos dois modelos no meio da tentativa.
+
 ### Extração de entidade — 50 falas rotuladas
 
 | método | dígitos | horário | data | nome | especialidade | **total** |

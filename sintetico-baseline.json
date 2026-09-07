@@ -1,0 +1,174 @@
+{
+  "resumo": {
+    "cenarios": 1,
+    "passou": 0,
+    "taxa_conclusao": 0.0,
+    "por_familia": {
+      "feliz": {
+        "passou": 0,
+        "total": 1,
+        "taxa": 0.0
+      }
+    },
+    "bloqueios": {},
+    "transferencias": {},
+    "motivos_de_contato": {
+      "consulta de agenda: Dermatologia": 1
+    },
+    "recuperacao": {
+      "cenarios": 0,
+      "recuperou": 0,
+      "taxa": null
+    },
+    "turnos_media": 12,
+    "latencia_p50_ms": 0.6,
+    "latencia_p95_ms": 3.0,
+    "tokens_entrada": 0,
+    "tokens_saida": 0,
+    "custo_free_tier_usd": 0.0,
+    "custo_referencia_paga_usd": 0.0,
+    "custo_referencia_por_ligacao_usd": 0.0
+  },
+  "cenarios": [
+    {
+      "id": "A1",
+      "passou": false,
+      "falhas": [
+        "esperava agendou=True, foi False",
+        "não usou propor_reserva"
+      ],
+      "ligacao_id": "eval-A1",
+      "paciente_id": 1,
+      "motivo_contato": "consulta de agenda: Dermatologia",
+      "agendou": false,
+      "agendamento_id": null,
+      "transferiu": false,
+      "motivo_transferencia": null,
+      "turnos": 12,
+      "ferramentas": [
+        "buscar_paciente",
+        "buscar_paciente",
+        "buscar_paciente",
+        "buscar_paciente",
+        "buscar_paciente",
+        "buscar_paciente",
+        "__limite__",
+        "consultar_agenda",
+        "buscar_paciente",
+        "consultar_agenda"
+      ],
+      "bloqueios": [],
+      "tokens_entrada": 0,
+      "tokens_saida": 0,
+      "latencia_total_ms": 10.13,
+      "latencias_ms": [
+        0.2,
+        1.13,
+        3.04,
+        0.58,
+        2.11,
+        0.5,
+        0.25,
+        0.38,
+        0.35,
+        0.31,
+        0.58,
+        0.7
+      ],
+      "transcricao": [
+        {
+          "papel": "paciente",
+          "texto": "Alô, boa tarde! Aqui é a Thaís Vasconcelos. Eu gostaria de marcar uma consulta, por favor."
+        },
+        {
+          "papel": "agente",
+          "texto": "Esta ligação é gravada. Qual especialidade você precisa?"
+        },
+        {
+          "papel": "paciente",
+          "texto": "Dermatologia, por favor.Eu preciso de um horário na parte da manhã, entre 9 h e 11 h, na próxima semana, se possível. \n\nNome: Thaís Vasconcelos  \nTelefone: 11 97810‑6871  \nCPF: «dígitos omitidos»‑06."
+        },
+        {
+          "papel": "paciente",
+          "texto": "Tudo bem, fico no aguardo."
+        },
+        {
+          "papel": "agente",
+          "texto": "Me diz seu telefone com DDD, por favor?"
+        },
+        {
+          "papel": "paciente",
+          "texto": "Claro, é (11) 97810‑6871."
+        },
+        {
+          "papel": "agente",
+          "texto": "Consegui com Dra. Larissa Nakamura, segunda-feira, 7 de setembro, às 10h. Posso confirmar?"
+        },
+        {
+          "papel": "paciente",
+          "texto": "Sim, confirmo o horário para segunda‑feira, 7 de setembro, às 10 h com a Dra. Larissa Nakamura. Obrigada!"
+        },
+        {
+          "papel": "agente",
+          "texto": "Não tenho nada dentro do que você pediu. O mais próximo é Dra. Larissa Nakamura, segunda-feira, 7 de setembro, às 10h. Serve?"
+        },
+        {
+          "papel": "paciente",
+          "texto": "Serve perfeitamente. Obrigada! ENCERRAR"
+        },
+        {
+          "papel": "agente",
+          "texto": "Não tenho nada dentro do que você pediu. O mais próximo é Dra. Larissa Nakamura, segunda-feira, 7 de setembro, às 10h. Serve?"
+        },
+        {
+          "papel": "paciente",
+          "texto": "Serve, pode confirmar o horário. Obrigada! ENCERRAR"
+        },
+        {
+          "papel": "agente",
+          "texto": "Não tenho nada dentro do que você pediu. O mais próximo é Dra. Larissa Nakamura, segunda-feira, 7 de setembro, às 10h. Serve?"
+        },
+        {
+          "papel": "paciente",
+          "texto": "Serve, pode confirmar o horário. Obrigada! ENCERRAR"
+        },
+        {
+          "papel": "agente",
+          "texto": "Não tenho nada dentro do que você pediu. O mais próximo é Dra. Larissa Nakamura, segunda-feira, 7 de setembro, às 10h. Serve?"
+        },
+        {
+          "papel": "paciente",
+          "texto": "Serve, pode confirmar o horário. Obrigada! ENCERRAR"
+        },
+        {
+          "papel": "agente",
+          "texto": "Não tenho nada dentro do que você pediu. O mais próximo é Dra. Larissa Nakamura, segunda-feira, 7 de setembro, às 10h. Serve?"
+        },
+        {
+          "papel": "paciente",
+          "texto": "Serve, pode confirmar o horário. Obrigada! ENCERRAR"
+        },
+        {
+          "papel": "agente",
+          "texto": "Não tenho nada dentro do que você pediu. O mais próximo é Dra. Larissa Nakamura, segunda-feira, 7 de setembro, às 10h. Serve?"
+        },
+        {
+          "papel": "paciente",
+          "texto": "Serve, pode confirmar o horário. Obrigada! ENCERRAR"
+        },
+        {
+          "papel": "agente",
+          "texto": "Não tenho nada dentro do que você pediu. O mais próximo é Dra. Larissa Nakamura, segunda-feira, 7 de setembro, às 10h. Serve?"
+        },
+        {
+          "papel": "paciente",
+          "texto": "Serve, pode confirmar o horário. Obrigada! ENCERRAR"
+        },
+        {
+          "papel": "agente",
+          "texto": "Não tenho nada dentro do que você pediu. O mais próximo é Dra. Larissa Nakamura, segunda-feira, 7 de setembro, às 10h. Serve?"
+        }
+      ]
+    }
+  ]
+}

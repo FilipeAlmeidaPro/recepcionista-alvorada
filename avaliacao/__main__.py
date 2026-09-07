@@ -27,6 +27,8 @@ def main() -> int:
     p.add_argument("--modelo", help="sobrescreve o modelo do provedor")
     p.add_argument("--paciente", choices=("roteirizado", "sintetico"),
                    default="roteirizado")
+    p.add_argument("--modelo-paciente",
+                   help="modelo do paciente sintético (padrão: o mesmo do agente)")
     p.add_argument("--json", metavar="ARQUIVO")
     p.add_argument("--painel", metavar="ARQUIVO.html",
                    help="gera o painel da rodada (HTML de arquivo único)")
@@ -66,9 +68,24 @@ def main() -> int:
 
     print(f"provedor: {agente.nome} · paciente: {args.paciente} · "
           f"{len(escolhidos)} cenários\n")
+    # O paciente sintético precisa de um LLM próprio. Sem isto, rodar o
+    # baseline de regras contra ele daria à recepcionista de `if` o papel de
+    # paciente — e o teste que interessa é exatamente esse: um agente burro
+    # contra alguém imprevisível.
+    fabrica_paciente = None
+    if args.paciente == "sintetico":
+        try:
+            voz_do_paciente = ProvedorOpenAICompativel(
+                args.provedor if args.provedor in PERFIS else "groq",
+                modelo=args.modelo_paciente or args.modelo)
+        except RuntimeError as e:
+            print(f"paciente sintético precisa de chave: {e}", file=sys.stderr)
+            return 2
+        print(f"  paciente sintético em {voz_do_paciente.nome}\n")
+        fabrica_paciente = lambda _c: voz_do_paciente      # noqa: E731
+
     resultados = rodar(escolhidos, lambda _c: agente,
-                       fabrica_paciente=(lambda _c: agente)
-                       if args.paciente == "sintetico" else None)
+                       fabrica_paciente=fabrica_paciente)
 
     print(relatorio.tabela(resultados))
     print(relatorio.metricas(resultados))

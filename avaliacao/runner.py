@@ -74,7 +74,8 @@ def executar(cenario: Cenario, provedor_agente, *, provedor_paciente=None,
 
     if provedor_paciente is not None:
         paciente = PacienteSintetico(
-            provedor_paciente, objetivo=cenario.objetivo_do_paciente(),
+            provedor_paciente,
+            objetivo=cenario.objetivo_do_paciente().format(**ctx),
             personalidade=cenario.personalidade,
             dados={k: ctx[k] for k in ("nome", "telefone", "cpf")})
     else:
@@ -85,10 +86,15 @@ def executar(cenario: Cenario, provedor_agente, *, provedor_paciente=None,
     saida = ResultadoCenario(cenario)
     try:
         fala_do_agente = ""
+        repetidas = 0
         while (fala := paciente.falar(fala_do_agente)) is not None:
             turno = agente.dizer(fala)
+            # Agente repetindo a mesma frase não avança a ligação; é laço, e
+            # laço não é resultado de teste. Na primeira rodada com paciente
+            # sintético o baseline repetiu a mesma resposta oito vezes.
+            repetidas = repetidas + 1 if turno.fala_agente == fala_do_agente else 0
             fala_do_agente = turno.fala_agente
-            if agente.transferencia:
+            if agente.transferencia or repetidas >= 2:
                 break
         saida.resultado = agente.resultado()
         saida.falhas = avaliar(cenario.espera, agente, conn, ctx)

@@ -65,7 +65,19 @@ class Cenario:
     exige_recuperacao: bool = False   # algo dá errado no meio e o agente reage
 
     def objetivo_do_paciente(self) -> str:
-        return self.objetivo or self.titulo
+        """O que a pessoa quer, para o paciente sintético perseguir.
+
+        Sem isto o objetivo era o título do cenário — "Agendamento com
+        restrição de horário" —, que não diz nem a especialidade. Na primeira
+        rodada o paciente pediu dermatologia num cenário de ortopedia e o teste
+        mediu outra coisa. O roteiro descreve o que a pessoa quer; aqui ele vira
+        **briefing**, não fala: o paciente persegue o mesmo objetivo com as
+        palavras dele.
+        """
+        briefing = " ".join(f for f in self.falas if f and f != "...")
+        alvo = self.objetivo or self.titulo
+        return (f"{alvo}.\n\nO que você quer, e que você vai dizer com as suas "
+                f"próprias palavras (nunca copiando estas):\n{briefing}")
 
 
 def _c(id, familia, titulo, testa, falas, espera, personalidade=PADRAO, objetivo="",
