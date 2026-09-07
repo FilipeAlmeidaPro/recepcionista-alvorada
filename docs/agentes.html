@@ -9,7 +9,8 @@
     --ink:#0e120f; --ink-2:#4a544c; --ink-3:#79837a;
     --line:rgba(14,18,15,.14); --line-2:rgba(14,18,15,.07);
     --accent:#16a34a; --accent-soft:rgba(22,163,74,.10);
-    --llm:#b5361f; --llm-soft:rgba(181,54,31,.09);
+    --modelo:#7c3aed; --modelo-soft:rgba(124,58,237,.10);
+    --alerta:#a8730a; --alerta-soft:rgba(168,115,10,.10);
     --r1:8px; --r2:14px; --r3:16px;
     --sans:"Space Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -20,7 +21,8 @@
       --ink:#f8f8f6; --ink-2:#a3ada6; --ink-3:#6e786f;
       --line:rgba(248,248,246,.15); --line-2:rgba(248,248,246,.07);
       --accent:#4ade80; --accent-soft:rgba(74,222,128,.12);
-      --llm:#f0705a; --llm-soft:rgba(240,112,90,.13);
+      --modelo:#a78bfa; --modelo-soft:rgba(167,139,250,.15);
+      --alerta:#e0a63c; --alerta-soft:rgba(224,166,60,.13);
     }
   }
   :root[data-theme="dark"]{
@@ -28,7 +30,8 @@
     --ink:#f8f8f6; --ink-2:#a3ada6; --ink-3:#6e786f;
     --line:rgba(248,248,246,.15); --line-2:rgba(248,248,246,.07);
     --accent:#4ade80; --accent-soft:rgba(74,222,128,.12);
-    --llm:#f0705a; --llm-soft:rgba(240,112,90,.13);
+    --modelo:#a78bfa; --modelo-soft:rgba(167,139,250,.15);
+    --alerta:#e0a63c; --alerta-soft:rgba(224,166,60,.13);
   }
 
   *{box-sizing:border-box}
@@ -53,7 +56,7 @@
     font:400 13px var(--mono);color:var(--ink-3)}
   .legenda span{display:flex;align-items:center;gap:8px}
   .selo{width:11px;height:11px;border-radius:3px}
-  .selo.llm{background:var(--llm-soft);border:1.5px solid var(--llm)}
+  .selo.modelo{background:var(--modelo-soft);border:1.5px solid var(--modelo)}
   .selo.det{background:var(--accent-soft);border:1.5px solid var(--accent)}
 
   figure{margin:36px 0 12px}
@@ -62,7 +65,7 @@
     margin-top:14px;max-width:64ch}
   figcaption b{color:var(--ink-2);font-weight:500}
 
-  .d-llm{fill:var(--llm-soft);stroke:var(--llm);stroke-width:1.4}
+  .d-modelo{fill:var(--modelo-soft);stroke:var(--modelo);stroke-width:1.4}
   .d-det{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.4}
   .d-neutra{fill:var(--surface);stroke:currentColor;stroke-opacity:.3;stroke-width:1}
   .d-vazia{fill:none;stroke:currentColor;stroke-opacity:.28;stroke-width:1.2;
@@ -71,7 +74,7 @@
   .d-rot-p{fill:var(--ink);font:500 12px var(--sans)}
   .d-sub{fill:var(--ink-3);font:400 10.5px var(--mono)}
   .d-num{fill:var(--ink-2);font:500 11.5px var(--mono)}
-  .d-num-llm{fill:var(--llm);font:500 11.5px var(--mono)}
+  .d-num-modelo{fill:var(--modelo);font:500 11.5px var(--mono)}
   .d-num-det{fill:var(--accent);font:500 11.5px var(--mono)}
   .d-eixo{stroke:currentColor;stroke-opacity:.5;stroke-width:1.3;fill:none}
   .d-eixo-frouxo{stroke:currentColor;stroke-opacity:.35;stroke-width:1.2;fill:none;
@@ -92,13 +95,13 @@
   td.forte{color:var(--ink);font-weight:500}
   .tag{font:500 10.5px var(--mono);padding:3px 8px;border-radius:5px;
     white-space:nowrap;display:inline-block}
-  .tag.llm{color:var(--llm);background:var(--llm-soft)}
+  .tag.modelo{color:var(--modelo);background:var(--modelo-soft)}
   .tag.det{color:var(--accent);background:var(--accent-soft)}
   .apagado{color:var(--ink-3)}
 
   .nota{border-left:2px solid var(--accent);background:var(--accent-soft);
     padding:16px 20px;border-radius:0 var(--r1) var(--r1) 0;margin:26px 0}
-  .nota.aviso{border-left-color:var(--llm);background:var(--llm-soft)}
+  .nota.aviso{border-left-color:var(--alerta);background:var(--alerta-soft)}
   .nota p{margin:0;color:var(--ink)}
   .nota p+p{margin-top:10px}
 
@@ -114,7 +117,7 @@
   modelos, quatro superfícies. <strong>Cinco usam LLM. O supervisor que
   coordena esses cinco não usa — é código.</strong></p>
   <div class="legenda">
-    <span><i class="selo llm"></i> usa LLM · pode inventar</span>
+    <span><i class="selo modelo"></i> usa um modelo · pode inventar</span>
     <span><i class="selo det"></i> determinístico · não inventa</span>
   </div>
 </header>
@@ -139,7 +142,7 @@
   </defs>
 
   <!-- pacientes -->
-  <rect class="d-llm" x="300" y="26" width="132" height="58" rx="11"/>
+  <rect class="d-modelo" x="300" y="26" width="132" height="58" rx="11"/>
   <text class="d-rot-p" x="314" y="48">Paciente sintético</text>
   <text class="d-sub" x="314" y="66">objetivo privado</text>
 
@@ -152,10 +155,10 @@
   <text class="d-sub" x="447" y="112" text-anchor="middle">conversa</text>
 
   <!-- orquestrador -->
-  <rect class="d-llm" x="340" y="148" width="212" height="84" rx="13"/>
+  <rect class="d-modelo" x="340" y="148" width="212" height="84" rx="13"/>
   <text class="d-rot" x="356" y="176">Orquestrador</text>
   <text class="d-sub" x="356" y="194">6 ferramentas · 348 linhas</text>
-  <text class="d-num-llm" x="356" y="216">o único com ferramentas</text>
+  <text class="d-num-modelo" x="356" y="216">o único com ferramentas</text>
 
   <!-- normalizador -->
   <rect class="d-det" x="34" y="156" width="220" height="68" rx="12"/>
@@ -230,15 +233,15 @@ não pelo modelo</b>. É a fala mais importante que o sistema produz, e é a
   <path class="d-eixo" marker-end="url(#b1)" d="M500,72 L500,102 L720,102 L720,130"/>
   <text class="d-sub" x="450" y="96" text-anchor="middle">ao mesmo tempo</text>
 
-  <rect class="d-llm" x="40" y="132" width="260" height="86" rx="13"/>
+  <rect class="d-modelo" x="40" y="132" width="260" height="86" rx="13"/>
   <text class="d-rot" x="58" y="158">Orquestrador</text>
   <text class="d-sub" x="58" y="176">6 ferramentas · ~3 000 tokens</text>
-  <text class="d-num-llm" x="58" y="200">1 000–1 500 ms</text>
+  <text class="d-num-modelo" x="58" y="200">1 000–1 500 ms</text>
 
-  <rect class="d-llm" x="590" y="132" width="260" height="86" rx="13"/>
+  <rect class="d-modelo" x="590" y="132" width="260" height="86" rx="13"/>
   <text class="d-rot" x="608" y="158">Guardião de risco</text>
   <text class="d-sub" x="608" y="176">1 pergunta · ~80 tokens</text>
-  <text class="d-num-llm" x="608" y="200">615 ms · some no paralelo</text>
+  <text class="d-num-modelo" x="608" y="200">615 ms · some no paralelo</text>
 
   <path class="d-eixo" marker-end="url(#b1)" d="M170,218 L170,266 L326,266"/>
   <path class="d-eixo" marker-end="url(#b1)" d="M720,218 L720,266 L574,266"/>
@@ -298,14 +301,14 @@ cometer.</figcaption>
   <text class="d-sub" x="584" y="128">o agente de regras aguenta</text>
   <text class="d-sub" x="584" y="146">um paciente imprevisível?</text>
 
-  <rect class="d-llm" x="264" y="192" width="280" height="120" rx="13"/>
-  <text class="d-num-llm" x="284" y="226">24/28 · 8/12</text>
+  <rect class="d-modelo" x="264" y="192" width="280" height="120" rx="13"/>
+  <text class="d-num-modelo" x="284" y="226">24/28 · 8/12</text>
   <text class="d-sub" x="284" y="250">gpt-oss-120b e gpt-oss-20b</text>
   <text class="d-sub" x="284" y="268">dois modelos, porque a cota</text>
   <text class="d-sub" x="284" y="286">não comporta os 40 num só</text>
 
   <rect class="d-vazia" x="564" y="192" width="280" height="120" rx="13"/>
-  <text class="d-num-llm" x="584" y="226">a célula vazia</text>
+  <text class="d-num-modelo" x="584" y="226">a célula vazia</text>
   <text class="d-sub" x="584" y="250">~810 mil tokens para os 40</text>
   <text class="d-sub" x="584" y="268">o free tier dá 200 mil por dia</text>
   <text class="d-sub" x="584" y="286">uma família de 7 cabe: ~142 mil</text>
@@ -323,19 +326,19 @@ prova</b>. Uma família de sete cenários cabe na cota de um dia.</figcaption>
   <tr><th>agente</th><th>papel</th><th>motor</th><th class="n">tamanho</th></tr>
   <tr><td class="forte">Orquestrador</td>
       <td>conduz a ligação, chama 6 ferramentas, propõe escritas</td>
-      <td><span class="tag llm">LLM</span></td><td class="n">348</td></tr>
+      <td><span class="tag modelo">LLM</span></td><td class="n">348</td></tr>
   <tr><td class="forte">Paciente sintético</td>
       <td>liga com objetivo privado e personalidade; não segue roteiro</td>
-      <td><span class="tag llm">LLM</span></td><td class="n">98</td></tr>
+      <td><span class="tag modelo">LLM</span></td><td class="n">98</td></tr>
   <tr><td class="forte">Guardião de risco</td>
       <td>uma pergunta por turno, em paralelo: há sinal de risco nesta frase?</td>
-      <td><span class="tag llm">LLM</span></td><td class="n">—</td></tr>
+      <td><span class="tag modelo">LLM</span></td><td class="n">—</td></tr>
   <tr><td class="forte">Escriba</td>
       <td>depois da ligação: escreve o resumo para quem recebe a transferência</td>
-      <td><span class="tag llm">LLM</span></td><td class="n">—</td></tr>
+      <td><span class="tag modelo">LLM</span></td><td class="n">—</td></tr>
   <tr><td class="forte">Extrator de entidade</td>
       <td>só no benchmark: lê a fala crua e devolve a entidade</td>
-      <td><span class="tag llm">LLM</span></td><td class="n">—</td></tr>
+      <td><span class="tag modelo">LLM</span></td><td class="n">—</td></tr>
   <tr><td class="forte">Supervisor</td>
       <td>coordena os especialistas; roda o guardião em paralelo e preempta</td>
       <td><span class="tag det">código</span></td><td class="n">265</td></tr>
