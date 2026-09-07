@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recepcionista Alvorada</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --fundo:#0b0b0b; --superficie:#131513; --superficie2:#1a1e1a;
+    --tinta:#f8f8f6; --tinta2:#a3ada6; --tinta3:#6e786f;
+    --linha:rgba(248,248,246,.14);
+    --verde:#4ade80; --verde-esc:#16a34a; --vermelho:#f0705a; --ambar:#e0a63c;
+    --sans:"Space Grotesk",-apple-system,BlinkMacSystemFont,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--fundo);color:var(--tinta);
+    font:400 15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+  .app{max-width:1180px;margin:0 auto;padding:32px 24px 64px;
+    display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:28px}
+  @media (max-width:900px){.app{grid-template-columns:1fr}}
+
+  header{grid-column:1/-1;display:flex;justify-content:space-between;
+    align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+  h1{font:500 22px/1.2 var(--sans);margin:0;letter-spacing:-.01em}
+  .sub{color:var(--tinta3);font:400 13px var(--mono)}
+
+  .painel{background:var(--superficie);border:.5px solid var(--linha);
+    border-radius:16px;padding:22px}
+  h2{font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.13em;
+    color:var(--tinta3);margin:0 0 16px}
+
+  /* conversa */
+  #conversa{min-height:290px;max-height:52vh;overflow-y:auto;display:flex;
+    flex-direction:column;gap:14px;padding-right:6px}
+  .fala{display:grid;grid-template-columns:76px 1fr;gap:12px;font-size:15px}
+  .fala .quem{color:var(--tinta3);font:400 11px var(--mono);text-align:right;
+    padding-top:4px;text-transform:uppercase;letter-spacing:.06em}
+  .fala.agente .quem{color:var(--verde-esc)}
+  .fala .txt{color:var(--tinta)}
+  .fala.paciente .txt{color:var(--tinta2)}
+  .vazio{color:var(--tinta3);font-size:14px;text-align:center;padding:64px 20px}
+
+  /* botão */
+  .controles{margin-top:22px;display:flex;align-items:center;gap:18px;
+    flex-wrap:wrap}
+  #falar{appearance:none;border:none;cursor:pointer;font:500 15px var(--sans);
+    color:#0b0b0b;background:var(--verde);padding:16px 30px;border-radius:999px;
+    display:flex;align-items:center;gap:11px;transition:transform .08s ease}
+  #falar:disabled{background:var(--superficie2);color:var(--tinta3);cursor:default}
+  #falar:focus-visible{outline:2px solid var(--tinta);outline-offset:3px}
+  #falar.gravando{background:var(--vermelho);color:#0b0b0b;transform:scale(1.03)}
+  #falar .ponto{width:9px;height:9px;border-radius:50%;background:currentColor}
+  #falar.gravando .ponto{animation:pulsa 1s ease-in-out infinite}
+  @keyframes pulsa{50%{opacity:.25}}
+  @media (prefers-reduced-motion:reduce){
+    #falar .ponto{animation:none} #falar{transition:none}}
+  .dica{color:var(--tinta3);font:400 12.5px var(--mono)}
+  kbd{background:var(--superficie2);border:.5px solid var(--linha);
+    border-radius:5px;padding:2px 7px;font:400 11.5px var(--mono);color:var(--tinta2)}
+  #reiniciar{appearance:none;background:none;border:.5px solid var(--linha);
+    color:var(--tinta2);font:400 12.5px var(--sans);padding:9px 16px;
+    border-radius:999px;cursor:pointer;margin-left:auto}
+  #reiniciar:hover{border-color:var(--tinta3);color:var(--tinta)}
+
+  /* trace */
+  .lateral{display:flex;flex-direction:column;gap:16px}
+  .estagio{display:grid;grid-template-columns:96px 1fr 62px;gap:10px;
+    align-items:center;padding:4px 0}
+  .estagio .rot{font:400 12px var(--mono);color:var(--tinta2)}
+  .trilho{height:11px;background:var(--superficie2);border-radius:6px;overflow:hidden}
+  .preenche{height:100%;border-radius:0 4px 4px 0;background:var(--tinta3);min-width:2px}
+  .preenche.lento{background:var(--vermelho)}
+  .preenche.rapido{background:var(--verde)}
+  .estagio .ms{font:500 12px var(--mono);text-align:right;
+    font-variant-numeric:tabular-nums;color:var(--tinta)}
+  .total{margin-top:12px;padding-top:12px;border-top:.5px solid var(--linha);
+    display:flex;justify-content:space-between;font:500 13px var(--mono)}
+  .total .alvo{color:var(--tinta3);font-weight:400}
+
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font:400 11.5px var(--mono);padding:4px 10px;border-radius:7px;
+    background:var(--superficie2);color:var(--tinta2);border:.5px solid var(--linha)}
+  .chip.ok{color:var(--verde);border-color:rgba(74,222,128,.34)}
+  .chip.bloq{color:var(--vermelho);border-color:rgba(240,112,90,.4)}
+  .chip.aviso{color:var(--ambar);border-color:rgba(224,166,60,.38)}
+
+  .estado{display:flex;flex-direction:column;gap:8px;font-size:13.5px;
+    color:var(--tinta2)}
+  .estado b{color:var(--tinta);font-weight:500}
+  .erro{color:var(--vermelho);font-size:13.5px;margin-top:10px}
+  .apagado{color:var(--tinta3);font:400 12.5px var(--mono)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>Recepcionista Alvorada</h1>
+      <p class="sub" id="estadoLigacao">conectando…</p>
+    </div>
+    <p class="sub">o modelo propõe · o código escreve</p>
+  </header>
+
+  <main class="painel">
+    <h2>Ligação</h2>
+    <div id="conversa"><p class="vazio">Segure o botão e fale.<br>
+      Experimente: “queria marcar um ortopedista, mas só consigo depois das seis”.</p></div>
+    <div class="controles">
+      <button id="falar" disabled><span class="ponto"></span><span id="rotuloFalar">Segure para falar</span></button>
+      <span class="dica">ou segure <kbd>espaço</kbd></span>
+      <button id="reiniciar">Nova ligação</button>
+    </div>
+    <p class="erro" id="erro" hidden></p>
+  </main>
+
+  <aside class="lateral">
+    <section class="painel">
+      <h2>Latência por estágio</h2>
+      <div id="estagios"><p class="apagado">nenhum turno ainda</p></div>
+    </section>
+    <section class="painel">
+      <h2>O que o código fez</h2>
+      <div id="trace"><p class="apagado">nenhuma ferramenta chamada</p></div>
+    </section>
+    <section class="painel">
+      <h2>Estado</h2>
+      <div class="estado" id="estado"><span class="apagado">ligação não iniciada</span></div>
+    </section>
+  </aside>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const conversa = $("#conversa"), botao = $("#falar"), rotulo = $("#rotuloFalar");
+const erroEl = $("#erro");
+let ligacao = null, gravador = null, pedacos = [], gravando = false, ocupado = false;
+
+const ALVO = 800;
+
+function falha(msg){ erroEl.textContent = msg; erroEl.hidden = !msg; }
+
+function escreve(quem, texto){
+  const vazio = conversa.querySelector(".vazio");
+  if (vazio) vazio.remove();
+  const div = document.createElement("div");
+  div.className = "fala " + quem;
+  div.innerHTML = `<div class="quem">${quem}</div><div class="txt"></div>`;
+  div.querySelector(".txt").textContent = texto;
+  conversa.append(div);
+  conversa.scrollTop = conversa.scrollHeight;
+}
+
+function tocar(b64){
+  if (!b64) return;
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], {type:"audio/wav"}));
+  const a = new Audio(url);
+  a.onended = () => URL.revokeObjectURL(url);
+  a.play().catch(()=>{});
+}
+
+function pintaEstagios(e){
+  const pico = Math.max(e.stt, e.orquestrador, e.tts, 1);
+  const linha = (rot, ms) => {
+    const classe = ms <= ALVO/3 ? "rapido" : (ms > ALVO ? "lento" : "");
+    return `<div class="estagio"><span class="rot">${rot}</span>
+      <div class="trilho"><div class="preenche ${classe}" style="width:${ms/pico*100}%"></div></div>
+      <span class="ms">${ms} ms</span></div>`;
+  };
+  $("#estagios").innerHTML =
+    linha("STT", e.stt) + linha("orquestrador", e.orquestrador) + linha("TTS", e.tts) +
+    `<div class="total"><span>turno completo</span>
+      <span>${e.total} ms <span class="alvo">/ alvo ${ALVO}</span></span></div>`;
+}
+
+function pintaTrace(d){
+  const partes = [];
+  if (d.restricao) partes.push(
+    `<span class="chip ${d.restricao_ambigua ? "aviso" : "ok"}">restrição: ${d.restricao}${
+      d.restricao_ambigua ? " · confirmar" : ""}</span>`);
+  for (const ev of d.eventos){
+    if (ev.regra) partes.push(`<span class="chip bloq">${ev.ferramenta} · BLOQUEADO ${ev.regra}</span>`);
+    else if (ev.erro) partes.push(`<span class="chip bloq">${ev.ferramenta} · ${ev.erro}</span>`);
+    else if (ev.veredito) partes.push(
+      `<span class="chip ok">${ev.ferramenta} · ${ev.veredito.regras_ok.length}/10 regras</span>`);
+    else partes.push(`<span class="chip">${ev.ferramenta}</span>`);
+  }
+  $("#trace").innerHTML = partes.length
+    ? `<div class="chips">${partes.join("")}</div>`
+    : `<p class="apagado">nenhuma ferramenta neste turno</p>`;
+}
+
+function pintaEstado(r){
+  const linhas = [];
+  linhas.push(`<span>agendou: <b>${r.agendou ? "sim" : "não"}</b></span>`);
+  if (r.transferiu) linhas.push(`<span>transferiu: <b>${r.motivo}</b></span>`);
+  if (r.bloqueios?.length)
+    linhas.push(`<span>o validador bloqueou: <b>${r.bloqueios.join(", ")}</b></span>`);
+  $("#estado").innerHTML = linhas.join("");
+}
+
+async function novaLigacao(){
+  falha("");
+  conversa.innerHTML = `<p class="vazio">Segure o botão e fale.</p>`;
+  $("#estagios").innerHTML = `<p class="apagado">nenhum turno ainda</p>`;
+  $("#trace").innerHTML = `<p class="apagado">nenhuma ferramenta chamada</p>`;
+  $("#estado").innerHTML = `<span class="apagado">ligação iniciada</span>`;
+  try{
+    const r = await fetch("/nova", {method:"POST"});
+    const d = await r.json();
+    ligacao = d.ligacao;
+    $("#estadoLigacao").textContent = ligacao;
+    escreve("agente", d.fala);
+    tocar(d.audio);
+    botao.disabled = false;
+  }catch(e){ falha("Não consegui abrir a ligação: " + e.message); }
+}
+
+async function prepararMicrofone(){
+  const fluxo = await navigator.mediaDevices.getUserMedia({audio:{
+    channelCount:1, echoCancellation:true, noiseSuppression:true}});
+  gravador = new MediaRecorder(fluxo);
+  gravador.ondataavailable = ev => { if (ev.data.size) pedacos.push(ev.data); };
+  gravador.onstop = enviar;
+}
+
+function comecar(){
+  if (gravando || ocupado || !gravador || botao.disabled) return;
+  pedacos = []; gravando = true;
+  botao.classList.add("gravando"); rotulo.textContent = "Gravando… solte para enviar";
+  gravador.start();
+}
+
+function parar(){
+  if (!gravando) return;
+  gravando = false;
+  botao.classList.remove("gravando"); rotulo.textContent = "Processando…";
+  gravador.stop();
+}
+
+async function enviar(){
+  ocupado = true; botao.disabled = true;
+  const blob = new Blob(pedacos, {type: gravador.mimeType || "audio/webm"});
+  try{
+    const r = await fetch("/turno", {method:"POST",
+      headers:{"X-Ligacao": ligacao, "Content-Type":"application/octet-stream"},
+      body: blob});
+    const d = await r.json();
+    if (d.erro){ falha({audio_curto_demais:"Fala muito curta — segure o botão um pouco mais.",
+                        audio_ilegivel:"Não consegui ler esse áudio.",
+                        ligacao_desconhecida:"A ligação expirou. Comece uma nova."}[d.erro] || d.erro); }
+    else {
+      falha("");
+      escreve("paciente", d.transcricao || "(sem fala reconhecida)");
+      escreve("agente", d.fala);
+      pintaEstagios(d.estagios); pintaTrace(d); pintaEstado(d.resultado);
+      tocar(d.audio);
+    }
+  }catch(e){ falha("Falha no turno: " + e.message); }
+  ocupado = false; botao.disabled = false; rotulo.textContent = "Segure para falar";
+}
+
+botao.addEventListener("mousedown", comecar);
+botao.addEventListener("touchstart", e => { e.preventDefault(); comecar(); }, {passive:false});
+addEventListener("mouseup", parar);
+addEventListener("touchend", parar);
+addEventListener("keydown", e => {
+  if (e.code === "Space" && !e.repeat && document.activeElement !== $("#reiniciar")){
+    e.preventDefault(); comecar(); }
+});
+addEventListener("keyup", e => { if (e.code === "Space"){ e.preventDefault(); parar(); }});
+$("#reiniciar").addEventListener("click", novaLigacao);
+
+(async () => {
+  try{ await prepararMicrofone(); }
+  catch(e){ falha("Preciso do microfone para atender. Libere o acesso e recarregue."); return; }
+  await novaLigacao();
+})();
+</script>
+</body>
+</html>

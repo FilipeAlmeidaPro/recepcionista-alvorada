@@ -32,7 +32,7 @@ things with reliability numbers attached beats one that does twelve with none.
 ```bash
 git clone <this-repo> && cd alvorada-receptionist
 python3 -m clinica.seed --data-base 2026-09-03   # builds data/clinica.db
-python3 -m unittest discover -s . -t .           # 136 tests, ~0.6 s
+python3 -m unittest discover -s . -t .           # 147 tests
 python3 -m avaliacao --provedor simulado         # 40 scenarios, no LLM, US$ 0
 ```
 
@@ -47,7 +47,30 @@ python3 -m avaliacao --provedor groq --painel panel.html
 python3 -m avaliacao.audio                 # audio suite
 python3 -m clinica.ligar --falas "Good evening, I need an orthopedist" \
                                  "Only after six" --ouvir
+python3 -m clinica.servidor                # browser demo, with a microphone
 ```
+
+### The browser demo
+
+```bash
+python3 -m clinica.servidor    #  http://127.0.0.1:8800
+```
+
+Hold the button (or the space bar), speak, release. The browser captures the
+mic with `MediaRecorder`; the server — stdlib `http.server`, zero dependencies
+— converts, transcribes, runs the turn and returns the spoken reply **plus the
+trace**.
+
+The on-screen trace is what separates this from a black box: the constraint the
+normalizer extracted (and whether it was a guess), every tool called, every
+validator rule that passed or blocked, and the milliseconds of each stage
+against the 800 ms target.
+
+**What it is:** push-to-talk. **What it isn't:** full-duplex with barge-in —
+interrupting the agent mid-sentence needs continuous VAD and streaming on both
+sides, which is where Pipecat would come in and the only part of the project
+that would break the zero-dependency promise. The seam is swapping this server
+for a WebRTC transport and keeping everything below it.
 
 > The codebase, prompts and CLI are in Portuguese — the product is a
 > Brazilian clinic receptionist, and mixing languages in domain code makes it
@@ -326,6 +349,9 @@ clinica/
   provedor.py      LLM interface (Groq/Gemini), retry, quota handling
   voz.py           TTS (say) and STT (Whisper), with per-stage timing
   ligar.py         end-to-end call CLI
+  servidor.py      browser demo (stdlib http.server)
+
+web/index.html     the page: push-to-talk and the live trace
 
 avaliacao/
   cenarios.py      40 scenarios in 7 families
@@ -337,7 +363,7 @@ avaliacao/
   painel.py        HTML panel
   relatorio.py     aggregate metrics
 
-tests/             136 tests, stdlib, ~0.6 s
+tests/             147 tests, stdlib
 ```
 
 **20 modules, 5,544 lines.** Database: 4 specialties, 6 professionals,
@@ -356,9 +382,10 @@ of an empty calendar.
 outbound calls, sales funnel. Architecture sketched for all of them, none
 implemented.
 
-**The missing layer:** microphone and browser WebRTC. Everything below that is
-built and measured — `python3 -m clinica.ligar` runs a full call from input
-audio to output audio, with per-stage timing.
+**The missing layer:** full-duplex with barge-in. Browser push-to-talk works
+(`python3 -m clinica.servidor`); interrupting the agent mid-sentence is what
+needs continuous VAD and streaming — Pipecat with `SmallWebRTCTransport`, and
+the project's first dependency.
 
 **Why not Vapi, Retell or n8n:** they hide exactly what this project sets out
 to show — the per-stage trace, turn control, the validation layer. I'd be

@@ -33,7 +33,7 @@ doze sem nenhum.
 ```bash
 git clone <este-repo> && cd recepcionista-alvorada
 python3 -m clinica.seed --data-base 2026-09-03   # gera data/clinica.db
-python3 -m unittest discover -s . -t .           # 136 testes, ~0,6 s
+python3 -m unittest discover -s . -t .           # 147 testes
 python3 -m avaliacao --provedor simulado         # 40 cenários, sem LLM, US$ 0
 ```
 
@@ -48,7 +48,30 @@ python3 -m avaliacao --provedor groq --painel painel.html
 python3 -m avaliacao.audio                 # suíte de áudio
 python3 -m clinica.ligar --falas "Boa noite, queria um ortopedista" \
                                  "Só depois das seis" --ouvir
+python3 -m clinica.servidor                # demo no navegador, com microfone
 ```
+
+### A demo no navegador
+
+```bash
+python3 -m clinica.servidor    #  http://127.0.0.1:8800
+```
+
+Segure o botão (ou a barra de espaço), fale, solte. O navegador captura o
+microfone com `MediaRecorder`, o servidor — `http.server` da stdlib, zero
+dependências — converte, transcreve, roda o turno e devolve a resposta em
+áudio **mais o trace**.
+
+É o trace na tela que separa esta demo de uma caixa-preta: a restrição que o
+normalizador extraiu (e se ela foi um chute), cada ferramenta chamada, cada
+regra do validador que passou ou bloqueou, e os milissegundos de cada estágio
+contra o alvo de 800 ms.
+
+**O que é:** push-to-talk. **O que não é:** full-duplex com barge-in —
+interromper o agente no meio da frase exige VAD contínuo e streaming dos dois
+lados, que é onde entraria o Pipecat e é a única parte do projeto que quebraria
+a promessa de zero dependências. O encaixe é trocar este servidor por um
+transporte WebRTC e manter tudo abaixo dele.
 
 ---
 
@@ -319,6 +342,9 @@ clinica/
   provedor.py      interface de LLM (Groq/Gemini), retry, cota
   voz.py           TTS (say) e STT (Whisper), com tempo por estágio
   ligar.py         CLI de uma ligação ponta a ponta
+  servidor.py      demo no navegador (http.server da stdlib)
+
+web/index.html     a página: push-to-talk e o trace ao vivo
 
 avaliacao/
   cenarios.py      40 cenários em 7 famílias
@@ -330,7 +356,7 @@ avaliacao/
   painel.py        painel HTML
   relatorio.py     métricas agregadas
 
-tests/             136 testes, stdlib, ~0,6 s
+tests/             147 testes, stdlib
 ```
 
 **20 módulos, 5 544 linhas.** Banco: 4 especialidades, 6 profissionais,
@@ -347,9 +373,10 @@ da demo ter tensão real em vez de devolver a primeira página da agenda.
 **Fora de escopo, de propósito:** convênios, preços, ERP, pagamentos, ligações
 ativas, funil comercial. Todos com arquitetura desenhada, nenhum implementado.
 
-**A camada que falta:** microfone e WebRTC no navegador. Tudo abaixo disso está
-construído e medido — `python3 -m clinica.ligar` roda a ligação inteira, do
-áudio de entrada ao áudio de saída, com o tempo de cada estágio.
+**A camada que falta:** full-duplex com barge-in. O push-to-talk no navegador
+funciona (`python3 -m clinica.servidor`); interromper o agente no meio da frase
+é o que exige VAD contínuo e streaming — Pipecat com `SmallWebRTCTransport`, e
+a primeira dependência do projeto.
 
 **Por que não Vapi, Retell ou n8n:** escondem exatamente o que este projeto
 quer mostrar — o trace por estágio, o controle do turno, a camada de validação.
