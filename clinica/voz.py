@@ -130,7 +130,7 @@ class TranscricaoGroq:
             URL_STT, data=corpo,
             headers={"Authorization": f"Bearer {self.chave}",
                      "Content-Type": f"multipart/form-data; boundary={limite}",
-                     "User-Agent": "recepcionista-alvorada/1.0"})
+                     "User-Agent": "voice-agent-assistant/1.0"})
         # Mesmo tratamento do cliente de chat: o teto do Whisper é de segundos
         # de áudio por hora, e uma rodada de 40 transcrições encosta nele.
         # A espera de rate limit fica fora da latência reportada — senão o

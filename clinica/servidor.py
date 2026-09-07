@@ -197,7 +197,7 @@ def main() -> int:
     servidor = ThreadingHTTPServer(("127.0.0.1", args.porta), Ligacao)
     # flush explícito: sem ele o banner só aparece quando o processo morre,
     # e quem roda fica sem saber se subiu.
-    print(f"Recepcionista Alvorada · {provedor.nome} · voz {args.voz}", flush=True)
+    print(f"Voice Agent Assistant · {provedor.nome} · voz {args.voz}", flush=True)
     print(f"  http://127.0.0.1:{args.porta}\n  ctrl+c para parar", flush=True)
     try:
         servidor.serve_forever()

@@ -1,7 +1,9 @@
-# Alvorada Receptionist
+# Voice Agent Assistant
 
 A Brazilian-Portuguese voice agent that books appointments for a
-multi-specialty clinic. It identifies the caller, understands a spoken
+multi-specialty clinic. The demo clinic — **Clínica Alvorada** — is fictional,
+and the 40 patients, their ID numbers and the whole calendar come from
+`Random(42)`. It identifies the caller, understands a spoken
 constraint, queries a real calendar, offers a slot, confirms out loud, and
 writes — or escalates to a human when that's the right call.
 
@@ -30,7 +32,7 @@ things with reliability numbers attached beats one that does twelve with none.
 ## Run it
 
 ```bash
-git clone <this-repo> && cd alvorada-receptionist
+git clone <this-repo> && cd voice-agent-assistant
 python3 -m clinica.seed --data-base 2026-09-03   # builds data/clinica.db
 python3 -m unittest discover -s . -t .           # 190 tests
 python3 -m avaliacao --provedor simulado         # 40 scenarios, no LLM, US$ 0

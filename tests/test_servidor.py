@@ -112,7 +112,7 @@ class TestRotas(BaseServidor):
     def test_pagina_e_servida(self):
         codigo, corpo = self._pedir("/")
         self.assertEqual(codigo, 200)
-        self.assertIn(b"Recepcionista Alvorada", corpo)
+        self.assertIn(b"Voice Agent Assistant", corpo)
         self.assertIn(b"MediaRecorder", corpo)
 
     def test_rota_desconhecida(self):

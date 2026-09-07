@@ -164,7 +164,7 @@ def gerar(resultados: list[ResultadoCenario], caminho: str, *,
               '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
               'family=Space+Grotesk:wght@400;500&display=swap">',
               f"<style>{CSS}</style>", '<div class="wrap">',
-              "<h1>Recepcionista Alvorada — rodada de eval</h1>",
+              "<h1>Voice Agent Assistant — rodada de eval</h1>",
               f'<p class="sub">{_e(len(resultados))} cenários · modelo '
               f"{_e(provedor)} · paciente {_e(paciente)} · "
               f'{datetime.now():%d/%m/%Y %H:%M}</p>']
@@ -229,5 +229,5 @@ def gerar(resultados: list[ResultadoCenario], caminho: str, *,
     with open(caminho, "w", encoding="utf-8") as f:
         f.write(f"<!doctype html><meta charset=utf-8>"
                 f"<meta name=viewport content='width=device-width,initial-scale=1'>"
-                f"<title>Eval — Recepcionista Alvorada</title>{saida}")
+                f"<title>Eval — Voice Agent Assistant</title>{saida}")
     return caminho

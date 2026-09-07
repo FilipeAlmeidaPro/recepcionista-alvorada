@@ -1,7 +1,8 @@
-# Recepcionista Alvorada
+# Voice Agent Assistant
 
 Agente de voz para agendamento em clínica multidisciplinar, em português do
-Brasil. Ele identifica o paciente, entende uma restrição falada, consulta a
+Brasil. A clínica da demo — **Clínica Alvorada** — é fictícia, e os 40
+pacientes, os CPFs e a agenda inteira são gerados por `Random(42)`. Ele identifica o paciente, entende uma restrição falada, consulta a
 agenda real, propõe horário, confirma em voz alta e grava — ou transfere para
 um humano quando é o certo a fazer.
 
@@ -31,7 +32,7 @@ doze sem nenhum.
 ## Rodar
 
 ```bash
-git clone <este-repo> && cd recepcionista-alvorada
+git clone <este-repo> && cd voice-agent-assistant
 python3 -m clinica.seed --data-base 2026-09-03   # gera data/clinica.db
 python3 -m unittest discover -s . -t .           # 190 testes
 python3 -m avaliacao --provedor simulado         # 40 cenários, sem LLM, US$ 0
