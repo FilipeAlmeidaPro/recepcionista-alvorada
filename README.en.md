@@ -32,7 +32,7 @@ things with reliability numbers attached beats one that does twelve with none.
 ```bash
 git clone <this-repo> && cd alvorada-receptionist
 python3 -m clinica.seed --data-base 2026-09-03   # builds data/clinica.db
-python3 -m unittest discover -s . -t .           # 177 tests
+python3 -m unittest discover -s . -t .           # 180 tests
 python3 -m avaliacao --provedor simulado         # 40 scenarios, no LLM, US$ 0
 ```
 
@@ -219,12 +219,18 @@ tools it called, what the validator blocked, and whether what got written
 respects the spoken constraint. Prompts and models change; these assertions
 survive.
 
-| Agent | Result |
-|---|---|
-| rule-based baseline, no LLM | **37/40** |
-| **Groq `gpt-oss-120b`** | **24/28** — daily quota ran out at E3 |
+| Agent | Scenarios | Result |
+|---|---|---|
+| rule-based baseline, no LLM | 40 | **37/40** |
+| Groq `gpt-oss-120b` | A1–E2 (28) | **24/28** |
+| Groq `gpt-oss-20b` | E3–F7 (12) | **8/12** |
 
-By family, against the real model:
+**All 40 scenarios have now run against a real LLM.** But across two different
+models, because the daily quota doesn't fit 40 in one go — which is why I
+**don't add the two numbers up**. 24/28 and 8/12 measure different models;
+writing "32/40" would invent a run that never happened.
+
+By family, on `gpt-oss-120b`:
 
 | family | result |
 |---|---|
@@ -268,6 +274,27 @@ Two inventions, delivered with the confidence of real data, without calling a
 single tool. This is exactly the class of error the validator does **not**
 catch: it guards the write, not the speech. The only defence is an eval
 assertion — and that's what caught it.
+
+
+### When two models disagree with your label, the label is what's wrong
+
+Scenario F5 expected escalation with reason `frustracao`. Both models
+classified it as `pedido_do_paciente` — and they were right: *"I want to speak
+to a person"* **is literally a request**. The assertion now accepts both, since
+what matters is escalating, and escalating fast, not the taxonomy.
+
+And three scenarios were failing on bad data, not on the agent:
+
+```
+caller: «dictated phone number»
+ agent: Sorry, the ID number you gave has only nine digits.
+        Could you repeat it, please?
+```
+
+My fixture built the phone number without the area code — nine digits, which
+**no Brazilian would ever say**. The model assumed an incomplete ID and asked
+again. Right once more. Three tests now guard fixture realism, because
+unrealistic data makes a correct model look wrong.
 
 ### Entity extraction — 50 labelled utterances
 
@@ -427,10 +454,10 @@ avaliacao/
   painel.py        HTML panel
   relatorio.py     aggregate metrics
 
-tests/             177 tests, stdlib
+tests/             180 tests, stdlib
 ```
 
-**20 modules, 5,544 lines.** Database: 4 specialties, 6 professionals,
+**22 modules, 6,512 lines.** Database: 4 specialties, 6 professionals,
 40 patients, 819 slots across 3 weeks.
 
 Scarcity in the seed is designed, not random: **only Dra. Thaís Bittencourt

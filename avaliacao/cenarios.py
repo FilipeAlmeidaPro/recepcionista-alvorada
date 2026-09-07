@@ -27,6 +27,7 @@ class Expectativa:
     agendou: bool | None = None
     transferiu: bool | None = None
     motivo_transferencia: str | None = None
+    motivos_aceitos: tuple[str, ...] = ()   # quando mais de um é defensável
     ferramentas_obrigatorias: tuple[str, ...] = ()
     ferramentas_proibidas: tuple[str, ...] = ()
     bloqueios_esperados: tuple[str, ...] = ()      # regras que DEVEM ter disparado
@@ -357,9 +358,15 @@ CENARIOS: list[Cenario] = [
 
     _c("F5", "dialogo", "Paciente irritado",
        "escalonamento por frustração",
-       ["Isso aqui é robô, né? Eu quero falar com uma pessoa.",
+       ["Isso aqui é uma palhaçada, já é a terceira vez que eu ligo hoje "
+        "e ninguém resolve nada.",
         "Não quero não, quero uma pessoa de verdade. Agora."],
-       Expectativa(transferiu=True, motivo_transferencia="frustracao"),
+       # Dois modelos independentes classificaram "quero falar com uma pessoa"
+       # como pedido_do_paciente, não frustracao — e estavam certos: é
+       # literalmente um pedido. Quando o modelo discorda do rótulo e tem
+       # razão, quem corrige é o rótulo. O que importa é escalar, e rápido.
+       Expectativa(transferiu=True, max_turnos=3,
+                   motivos_aceitos=("frustracao", "pedido_do_paciente")),
        personalidade="impaciente, ríspido, não quer falar com máquina"),
 
     _c("F6", "dialogo", "Pede para repetir",

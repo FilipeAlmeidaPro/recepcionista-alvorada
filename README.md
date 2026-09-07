@@ -33,7 +33,7 @@ doze sem nenhum.
 ```bash
 git clone <este-repo> && cd recepcionista-alvorada
 python3 -m clinica.seed --data-base 2026-09-03   # gera data/clinica.db
-python3 -m unittest discover -s . -t .           # 177 testes
+python3 -m unittest discover -s . -t .           # 180 testes
 python3 -m avaliacao --provedor simulado         # 40 cenários, sem LLM, US$ 0
 ```
 
@@ -211,12 +211,18 @@ produziu — é sobre o que aconteceu: agendou, transferiu, com que motivo, quai
 ferramentas usou, o que o validador bloqueou, e se o que ficou gravado respeita
 a restrição falada. Prompt e modelo mudam; essas asserções sobrevivem.
 
-| Agente | Resultado |
-|---|---|
-| baseline de regras, sem LLM | **37/40** |
-| **Groq `gpt-oss-120b`** | **24/28** — a cota do dia acabou em E3 |
+| Agente | Cenários | Resultado |
+|---|---|---|
+| baseline de regras, sem LLM | 40 | **37/40** |
+| Groq `gpt-oss-120b` | A1–E2 (28) | **24/28** |
+| Groq `gpt-oss-20b` | E3–F7 (12) | **8/12** |
 
-Por família, contra o modelo real:
+**Os 40 cenários já rodaram contra um LLM real.** Mas em dois modelos
+diferentes, porque a cota diária não comporta os 40 de uma vez — e por isso
+**não somo os dois números**. 24/28 e 8/12 medem modelos distintos; escrever
+"32/40" seria inventar uma rodada que nunca existiu.
+
+Por família, no `gpt-oss-120b`:
 
 | família | resultado |
 |---|---|
@@ -259,6 +265,28 @@ Duas invenções, ditas com a mesma confiança de um dado real, sem chamar
 ferramenta nenhuma. É exatamente a classe de erro que o validador **não** pega:
 ele protege a escrita, não a fala. Contra isso só existe asserção de eval —
 e foi ela que pegou.
+
+
+### Quando dois modelos discordam do seu rótulo, o rótulo é que está errado
+
+O cenário F5 esperava transferência por `frustracao`. Os dois modelos
+classificaram como `pedido_do_paciente` — e estavam certos: *"quero falar com
+uma pessoa"* **é literalmente um pedido**. A asserção agora aceita os dois
+motivos, porque o que importa é escalar, e rápido, não a taxonomia.
+
+E três cenários falhavam por causa de um dado ruim, não do agente:
+
+```
+paciente: «telefone ditado»
+  agente: Desculpe, mas o CPF que você digitou tem apenas nove números.
+          Poderia repetir, por favor?
+```
+
+Minha fixture montava o telefone tirando o DDD — nove dígitos, que **nenhum
+brasileiro dita**. O modelo achou que era um CPF incompleto e pediu para
+repetir. Estava certo de novo. Três testes agora garantem que a fixture é
+realista, porque dado irrealista faz o modelo parecer errado quando ele
+acertou.
 
 ### Extração de entidade — 50 falas rotuladas
 
@@ -418,10 +446,10 @@ avaliacao/
   painel.py        painel HTML
   relatorio.py     métricas agregadas
 
-tests/             177 testes, stdlib
+tests/             180 testes, stdlib
 ```
 
-**20 módulos, 5 544 linhas.** Banco: 4 especialidades, 6 profissionais,
+**22 módulos, 6 512 linhas.** Banco: 4 especialidades, 6 profissionais,
 40 pacientes, 819 slots em 3 semanas.
 
 A escassez do banco é desenhada, não sorteada: **só a Dra. Thaís Bittencourt

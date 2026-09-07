@@ -29,7 +29,10 @@ AGORA = datetime(2026, 9, 3, 19, 0)      # ligação fora do horário comercial
 
 def _contexto(conn) -> dict:
     p1, p2 = conn.execute("SELECT * FROM pacientes LIMIT 2").fetchall()
-    tel1, tel2 = p1["telefone"][4:], p2["telefone"][4:]
+    # [2:] tira só o código do país. O DDD fica: ninguém dita telefone sem ele,
+    # e um número de 9 dígitos fazia o modelo achar que era CPF incompleto e
+    # pedir para repetir — três cenários falhavam por causa da fixture.
+    tel1, tel2 = p1["telefone"][2:], p2["telefone"][2:]
     return {
         "nome": p1["nome"], "primeiro_nome": p1["nome"].split()[0],
         "telefone": tel1, "telefone_falado": ditar(tel1),
@@ -123,6 +126,10 @@ def avaliar(espera: Expectativa, agente: Agente, conn, ctx: dict | None = None) 
         confere(r["motivo_transferencia"] == espera.motivo_transferencia,
                 f"esperava transferência por {espera.motivo_transferencia}, "
                 f"foi {r['motivo_transferencia']}")
+    if espera.motivos_aceitos:
+        confere(r["motivo_transferencia"] in espera.motivos_aceitos,
+                f"transferiu por {r['motivo_transferencia']}, esperava um de "
+                f"{list(espera.motivos_aceitos)}")
 
     usadas = set(r["ferramentas"])
     for f in espera.ferramentas_obrigatorias:

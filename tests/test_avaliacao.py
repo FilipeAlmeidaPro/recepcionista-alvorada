@@ -133,6 +133,41 @@ class TestIntegridade(unittest.TestCase):
         self.assertIn("slot não ocupado", problemas[0])
 
 
+class TestFixture(unittest.TestCase):
+    """Fixture irrealista faz o modelo parecer errado quando ele está certo."""
+
+    def setUp(self):
+        self.conn = _banco()
+        self.addCleanup(self.conn.close)
+        self.ctx = _contexto(self.conn)
+
+    def test_telefone_tem_ddd(self):
+        """Sem DDD são 9 dígitos, e o modelo — corretamente — achava que era
+        um CPF incompleto e pedia para repetir. Três cenários falhavam por
+        causa disso, e a culpa era do dado, não do agente."""
+        from clinica.normalizador import extrair_digitos
+        for chave in ("telefone", "telefone_falado", "telefone_falado_meia",
+                      "telefone2_falado"):
+            with self.subTest(chave=chave):
+                self.assertEqual(len(extrair_digitos(self.ctx[chave])), 11)
+
+    def test_cpf_da_fixture_e_valido(self):
+        from clinica.normalizador import cpf_valido, extrair_digitos
+        self.assertTrue(cpf_valido(self.ctx["cpf"]))
+        self.assertEqual(extrair_digitos(self.ctx["cpf_falado"]), self.ctx["cpf"])
+        # o ditado com erro tem que resultar no mesmo CPF depois da correção
+        self.assertEqual(extrair_digitos(self.ctx["cpf_falado_com_erro"]),
+                         self.ctx["cpf"])
+
+    def test_o_telefone_ditado_encontra_o_cadastro(self):
+        from clinica import tools
+        from clinica.normalizador import extrair_digitos
+        r = tools.buscar_paciente(
+            self.conn, telefone=extrair_digitos(self.ctx["telefone_falado"]))
+        self.assertTrue(r["encontrado"])
+        self.assertEqual(r["paciente"]["id"], self.ctx["_paciente_id"])
+
+
 class TestCatalogo(unittest.TestCase):
     def test_todo_placeholder_resolve(self):
         conn = _banco()
