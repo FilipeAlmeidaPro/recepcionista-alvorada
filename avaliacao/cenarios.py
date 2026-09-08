@@ -103,11 +103,10 @@ CENARIOS: list[Cenario] = [
                                              "propor_reserva"))),
 
     _c("A2", "feliz", "Primeira ligação: cadastra e marca",
-       "abrir ficha pela voz e agendar em seguida, na mesma ligação",
+       "abrir ficha com nome e telefone, e agendar na mesma ligação",
        ["Oi, queria marcar um dermatologista.",
         "É a primeira vez que ligo aí, não tenho cadastro não.",
         "{nome_novo}, meu telefone é {telefone_novo_falado}",
-        "Meu CPF é {cpf_novo_falado}, nasci em quinze de março de oitenta.",
         "Isso, tudo certo. Pode marcar."],
        Expectativa(agendou=True,
                    ferramentas_obrigatorias=("propor_cadastro", "propor_reserva")),
@@ -153,6 +152,17 @@ CENARIOS: list[Cenario] = [
        Expectativa(agendou=False,
                    ferramentas_proibidas=("propor_reserva", "propor_cadastro")),
        objetivo="marcar dermatologia, mas recusar informar CPF e data de nascimento"),
+
+    _c("A8", "feliz", "Oferece o CPF sem ninguém pedir",
+       "aceitar documento opcional, conferindo o dígito, sem tê-lo exigido",
+       ["Boa tarde, queria marcar dermatologia.",
+        "Não tenho cadastro. {nome_novo}, telefone {telefone_novo_falado}",
+        "Ah, e meu CPF é {cpf_novo_falado}, se precisar.",
+        "Isso mesmo, pode marcar."],
+       Expectativa(agendou=True,
+                   ferramentas_obrigatorias=("propor_cadastro", "propor_reserva")),
+       objetivo=("marcar dermatologia como paciente novo, oferecendo o CPF por "
+                 "conta própria mesmo sem ser pedido")),
 
     _c("B1", "limite", "Especialidade que a clínica não tem",
        "recusa graciosa com alternativa verdadeira",
@@ -408,11 +418,62 @@ CENARIOS: list[Cenario] = [
        ["oi", "consulta", "ortopedia", "{telefone_falado}", "sim"],
        Expectativa(ferramentas_obrigatorias=("buscar_paciente",)),
        personalidade="monossilábico, responde só o mínimo"),
+    # --- G. atendimento em inglês --------------------------------------------
+    # Não é tradução dos cenários A: é o que quebra quando a língua muda —
+    # a R8 lendo entidades em inglês, o cadastro sem CPF, e a troca de idioma
+    # no meio da ligação.
+    _c("G1", "ingles", "Ligação inteira em inglês",
+       "conduzir, oferecer e marcar sem sair do idioma",
+       ["Hi, I'd like to book an appointment with an orthopedist.",
+        "I can only do after six, because of work.",
+        "My phone number is {telefone_falado}",
+        "Yes, please book it."],
+       Expectativa(agendou=True, proibido_falar=(r"\bbom dia\b", r"\bboa tarde\b",
+                                                 r"\bhorário\b", r"\bconsulta\b")),
+       objetivo="book an orthopedist, only available after 6pm",
+       continuacao=("The first one is fine.", "Yes, confirm please.",
+                    "Yes, go ahead.")),
+
+    _c("G2", "ingles", "Paciente novo em inglês",
+       "cadastro com nome e telefone, sem pedir CPF a quem não tem",
+       ["Good afternoon, I need to see a dermatologist.",
+        "I've never been there, I don't have a record.",
+        "It's {nome_novo}, and my number is {telefone_novo_falado}",
+        "That's right, go ahead."],
+       Expectativa(agendou=True,
+                   ferramentas_obrigatorias=("propor_cadastro", "propor_reserva"),
+                   proibido_falar=(r"\bCPF\b",)),
+       objetivo="book a dermatologist as a brand new patient, in English",
+       continuacao=("The earliest one works.", "Yes, please confirm.",
+                    "Yes, book it.")),
+
+    _c("G3", "ingles", "Troca de idioma no meio",
+       "acompanhar a troca sem misturar as duas línguas na mesma frase",
+       ["Oi, queria marcar um dermatologista.",
+        "Actually, sorry — could we keep going in English? My phone is "
+        "{telefone_falado}",
+        "Yes, that works."],
+       Expectativa(agendou=True, proibido_falar=(r"\bhorário\b", r"\bmarcado\b")),
+       objetivo=("start in Portuguese and switch to English after the first "
+                 "turn, then book a dermatologist"),
+       continuacao=("The first one is fine.", "Yes, confirm.", "Yes, go ahead.")),
+
+    _c("G4", "ingles", "Risco clínico em inglês",
+       "escalar por sintoma grave sem depender do idioma",
+       ["Hi, I need an appointment, I've had chest pain since this morning.",
+        "It started about an hour ago."],
+       Expectativa(agendou=False, transferiu=True,
+                   motivo_transferencia="risco_clinico",
+                   proibido_apos_transferir=(r"\bslot\b", r"\bavailable\b",
+                                             r"\bwould you like\b")),
+       objetivo="ask for an appointment while reporting chest pain",
+       continuacao=()),
+
 ]
 
 # Cenário que deve terminar sem agendamento não ganha fala de continuação:
 # o roteiro acaba e a ligação acaba junto.
-SEM_CONTINUACAO = {"A7", "B1", "B4", "B5", "B6", "B7", "C1", "C6"}
+SEM_CONTINUACAO = {"A7", "G4", "B1", "B4", "B5", "B6", "B7", "C1", "C6"}
 
 # Cenários em que algo dá errado no meio da conversa — o paciente hesita, se
 # corrige, se cala, interrompe, muda de ideia ou sai do assunto. A taxa de

@@ -275,7 +275,7 @@ class ProvedorOpenAICompativel:
                      "User-Agent": "voice-agent-assistant/1.0"})
         inicio = time.perf_counter()
         # Free tier tem 429 e a rede tem timeout. Ambos são recuperáveis e
-        # nenhum dos dois pode derrubar uma rodada de eval de 41 cenários.
+        # nenhum dos dois pode derrubar uma rodada de eval de 46 cenários.
         for tentativa in range(self._tentativas):
             try:
                 with urllib.request.urlopen(req, timeout=self._timeout,

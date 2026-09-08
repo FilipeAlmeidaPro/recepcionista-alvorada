@@ -1,6 +1,6 @@
 """CLI da suíte de eval.
 
-    python3 -m avaliacao                      # todos os 41 cenários
+    python3 -m avaliacao                      # todos os 46 cenários
     python3 -m avaliacao --familia risco      # só uma família
     python3 -m avaliacao --cenarios B5 C1     # cenários específicos
     python3 -m avaliacao --paciente sintetico # paciente também é LLM
