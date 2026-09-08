@@ -5,6 +5,7 @@ import unittest
 from datetime import date
 
 from clinica import db
+from clinica.idioma import EN, PT
 from clinica.normalizador import (Restricao, casar_especialidade, casar_nome,
                                   cpf_valido, extrair_digitos,
                                   interpretar_restricao, ler_digitos,
@@ -208,6 +209,23 @@ class TestEspecialidadeFalada(unittest.TestCase):
         for falado in ("neurologista", "clínico geral", "psiquiatra", "ok"):
             with self.subTest(falado=falado):
                 self.assertIsNone(casar_especialidade(falado, self.CATALOGO))
+
+    def test_ingles_precisa_de_apelido_e_nao_de_prefixo(self):
+        """Achado na eval em inglês: "orthopedist" não casa com "Ortopedia"
+        nem por prefixo — "ortho" contra "ortop". As outras três passavam por
+        acidente ("derma", "cardi", "neuro" coincidem nas duas línguas), o que
+        é pior do que falhar: a regra parecia funcionar."""
+        for falado in ("orthopedist", "orthopaedics", "bone doctor"):
+            with self.subTest(falado=falado):
+                self.assertEqual(
+                    casar_especialidade(falado, self.CATALOGO, EN), "Ortopedia")
+
+    def test_o_apelido_ingles_nao_vale_numa_ligacao_em_portugues(self):
+        self.assertIsNone(casar_especialidade("bone doctor", self.CATALOGO, PT))
+
+    def test_portugues_segue_igual(self):
+        self.assertEqual(casar_especialidade("ortopedista", self.CATALOGO, PT),
+                         "Ortopedia")
 
 
 class TestMascaramentoDeTranscricao(unittest.TestCase):

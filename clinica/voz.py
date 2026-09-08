@@ -75,11 +75,17 @@ class SinteseMacOS:
         self.voz = voz
         self.ritmo = palavras_por_minuto
 
-    def falar(self, texto: str, destino: Path) -> Audio:
+    def falar(self, texto: str, destino: Path, idi=None) -> Audio:
+        """A voz segue a língua da ligação.
+
+        `say` não troca de idioma sozinho: pedir inglês à Luciana produz
+        inglês com fonética portuguesa — inteligível para quem fala os dois,
+        incompreensível para quem só fala inglês.
+        """
         destino.parent.mkdir(parents=True, exist_ok=True)
         inicio = time.perf_counter()
         subprocess.run(
-            ["say", "-v", self.voz, "-r", str(self.ritmo),
+            ["say", "-v", (idi.voz_tts if idi else self.voz), "-r", str(self.ritmo),
              "--data-format=LEI16@16000", "-o", str(destino), texto],
             check=True, capture_output=True)
         ms = (time.perf_counter() - inicio) * 1000

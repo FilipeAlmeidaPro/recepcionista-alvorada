@@ -34,6 +34,7 @@ from pathlib import Path
 
 from clinica import db, retencao
 from clinica.agente import CLINICA, Agente
+from clinica.idioma import IDIOMAS, PT
 from clinica.provedor import CotaDiariaEsgotada, provedor_padrao
 from clinica.voz import TAXA, SinteseMacOS, TranscricaoGroq, duracao
 
@@ -111,14 +112,20 @@ class Ligacao(BaseHTTPRequestHandler):
     def _nova(self):
         ligacao_id = f"web-{uuid.uuid4().hex[:8]}"
         agora = datetime.now()
+        # A língua da abertura vem do navegador: no primeiro turno ainda não há
+        # fala do paciente para detectar, e abrir na língua errada custa a
+        # ligação inteira. Depois disso o agente segue quem ligou.
+        idi = IDIOMAS.get(self.headers.get("X-Idioma", "pt"), PT)
         with _trava:
             conn = db.conectar(self.servidor_voz.get("banco"))
             db.criar_schema(conn)      # tabela nova em banco antigo
             _ligacoes[ligacao_id] = Agente(
                 conn, self.servidor_voz["provedor"],
-                ligacao_id=ligacao_id, agora=agora, hoje=agora.date())
-        abertura = (f"{CLINICA}, {db.saudacao(agora).lower()}. Esta chamada é "
-                    f"gravada. Em que posso ajudar?")
+                ligacao_id=ligacao_id, agora=agora, hoje=agora.date(), idioma=idi)
+        abertura = (f"{CLINICA}, {db.saudacao(agora, idi).lower()}. Esta chamada é "
+                    f"gravada. Em que posso ajudar?" if idi.codigo == "pt" else
+                    f"{CLINICA}. {db.saudacao(agora, idi)}. This call is recorded. "
+                    f"How can I help you?")
         # A abertura é falada pelo servidor, mas o modelo precisa saber que ela
         # aconteceu — senão ele cumprimenta de novo e repete o aviso de
         # gravação no primeiro turno. Também é o que a R8 lê como "a última
@@ -128,8 +135,8 @@ class Ligacao(BaseHTTPRequestHandler):
         agente.mensagens.append({"role": "assistant", "content": abertura})
         agente.ultima_fala_agente = abertura
         audio = self.servidor_voz["tts"].falar(
-            abertura, Path(tempfile.gettempdir()) / f"{ligacao_id}-abertura.wav")
-        self._json({"ligacao": ligacao_id, "fala": abertura,
+            abertura, Path(tempfile.gettempdir()) / f"{ligacao_id}-abertura.wav", idi)
+        self._json({"ligacao": ligacao_id, "fala": abertura, "idioma": idi.codigo,
                     "audio": base64.b64encode(audio.caminho.read_bytes()).decode()})
 
     def _turno(self):
@@ -153,12 +160,16 @@ class Ligacao(BaseHTTPRequestHandler):
             if duracao(wav) < 0.35:
                 return self._json({"erro": "audio_curto_demais"}, 400)
 
-            t = self.servidor_voz["stt"].transcrever(wav)
+            # Transcreve na língua corrente e fala na língua resultante: se o
+            # paciente trocou de idioma neste turno, `dizer` já trocou também,
+            # e a resposta sai na língua nova.
+            t = self.servidor_voz["stt"].transcrever(wav, idioma=agente.idioma.codigo_stt)
             t0 = time.perf_counter()
             turno = agente.dizer(t.texto)
             ms_orquestrador = (time.perf_counter() - t0) * 1000
             saida = Path(tmp) / "resposta.wav"
-            fala = self.servidor_voz["tts"].falar(turno.fala_agente or "...", saida)
+            fala = self.servidor_voz["tts"].falar(turno.fala_agente or "...", saida,
+                                                  agente.idioma)
             audio_b64 = base64.b64encode(saida.read_bytes()).decode()
 
         resultado = agente.resultado()

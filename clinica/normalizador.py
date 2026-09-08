@@ -22,76 +22,61 @@ from datetime import date, timedelta
 from difflib import SequenceMatcher
 
 from clinica.db import sem_acento
+from clinica.idioma import PT, Idioma
 
 _TOKEN = re.compile(r"\d+|[a-z]+")
 
-_EXTENSO = {
-    "zero": 0, "um": 1, "uma": 1, "dois": 2, "duas": 2, "tres": 3, "quatro": 4,
-    "cinco": 5, "seis": 6, "sete": 7, "oito": 8, "nove": 9, "dez": 10,
-    "onze": 11, "doze": 12, "treze": 13, "quatorze": 14, "catorze": 14,
-    "quinze": 15, "dezesseis": 16, "dezasseis": 16, "dezessete": 17,
-    "dezoito": 18, "dezenove": 19, "vinte": 20, "trinta": 30, "quarenta": 40,
-    "cinquenta": 50, "sessenta": 60, "setenta": 70, "oitenta": 80,
-    "noventa": 90, "cem": 100, "cento": 100,
-    # Centenas e milhar: só aparecem em ano de nascimento, mas sem elas
-    # "mil novecentos e oitenta" só dava 1980 por acidente — "mil" e
-    # "novecentos" eram ignorados e sobrava o "oitenta".
-    "duzentos": 200, "trezentos": 300, "quatrocentos": 400,
-    "quinhentos": 500, "seiscentos": 600, "setecentos": 700,
-    "oitocentos": 800, "novecentos": 900, "mil": 1000,
-    "primeiro": 1,          # "primeiro de janeiro"
-}
+# As tabelas de língua moram em `idioma.py`. O que fica aqui é o algoritmo —
+# ele é um só, e é a razão de o inglês custar uma tabela e não um módulo novo.
+# Os nomes abaixo são re-exportados em português por compatibilidade: código
+# antigo que importava DIAS_SEMANA continua funcionando, agora explicitamente
+# como "as tabelas do idioma padrão".
+_EXTENSO = PT.extenso
+_CORRECAO = PT.correcao
+DIAS_SEMANA = PT.dias_semana
+MESES = PT.meses
+_MARC_MIN = PT.marc_min
+_MARC_MAX = PT.marc_max
+_PERIODOS = PT.periodos
+_LIGACOES = PT.ligacoes
+_PREPOSICOES = PT.preposicoes
+MARCAS_DE_PASSADO = PT.marcas_passado
+_NOMES_DIA = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
+
 _COMPOSTOS = {20, 30, 40, 50, 60, 70, 80, 90}
-
-# "meia" fica de fora do dicionário de propósito: em ditado de dígitos vale 6,
-# em expressão de hora vale 30 minutos. São dois modos, não um.
-_CORRECAO = {"nao", "desculpa", "desculpe", "perdao", "opa", "ops", "errei",
-             "corrige", "corrigindo", "alias", "menti"}
-
-DIAS_SEMANA = {"segunda": 0, "terca": 1, "quarta": 2, "quinta": 3,
-               "sexta": 4, "sabado": 5, "domingo": 6}
-MESES = {"janeiro": 1, "fevereiro": 2, "marco": 3, "abril": 4, "maio": 5,
-         "junho": 6, "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10,
-         "novembro": 11, "dezembro": 12}
-
-_MARC_MIN = {"depois", "partir", "apos"}
-_MARC_MAX = {"antes", "ate"}
-_PERIODOS = {"manha": ("06:00", "11:59"), "tarde": ("12:00", "17:59"),
-             "noite": ("18:00", "21:00")}
-_LIGACOES = {"das", "de", "do", "da", "a", "as", "o", "aos", "na", "no",
-             "pela", "pelo", "hora", "horas",
-             # O STT troca palavra de ligação por parecida: "depois DAR seis"
-             # em vez de "depois DAS seis". Achado na suíte de áudio — em texto
-             # isso nunca aparece.
-             "dar", "der", "dás", "dos", "ao"}
-_PREPOSICOES = {"de", "da", "do", "pela", "pelo", "a", "ao", "na", "no", "em"}
 
 
 def tokenizar(texto: str) -> list[str]:
     return _TOKEN.findall(sem_acento(texto))
 
 
-def _ler_numero(tokens: list[str], i: int) -> tuple[int | None, int]:
-    """Lê um número em dígito ou por extenso, inclusive composto ('vinte e três')."""
+def _ler_numero(tokens: list[str], i: int, idi: Idioma = PT) -> tuple[int | None, int]:
+    """Lê um número em dígito ou por extenso, inclusive composto.
+
+    Composto tem duas formas: "vinte e três" liga com "e", "twenty three" não
+    liga com nada. As duas casam no mesmo laço porque o que importa é a segunda
+    parte valer menos que a dezena."""
     if i >= len(tokens):
         return None, i
     tk = tokens[i]
     if tk.isdigit():
         return int(tk), i + 1
-    if tk not in _EXTENSO:
+    if tk not in idi.extenso:
         return None, i
-    valor = _EXTENSO[tk]
+    valor = idi.extenso[tk]
     prox = i + 1
-    if valor in _COMPOSTOS and prox + 1 < len(tokens) and tokens[prox] == "e":
-        parte, depois = _ler_numero(tokens, prox + 1)
-        if parte is not None and parte < valor:
-            return valor + parte, depois
+    if valor in _COMPOSTOS and prox < len(tokens):
+        salto = 1 if tokens[prox] in idi.conector_minuto | {"e"} else 0
+        if prox + salto < len(tokens):
+            parte, depois = _ler_numero(tokens, prox + salto, idi)
+            if parte is not None and parte < valor and (salto or idi.codigo != "pt"):
+                return valor + parte, depois
     return valor, prox
 
 
 # --- 1. dígitos ditados ------------------------------------------------------
 
-def extrair_digitos(texto: str) -> str:
+def extrair_digitos(texto: str, idi: Idioma = PT) -> str:
     """CPF/telefone ditado, com hesitação e correção.
 
         "quatro, três... não, dois"  -> "42"
@@ -108,15 +93,15 @@ def extrair_digitos(texto: str) -> str:
     i = 0
     while i < len(tokens):
         tk = tokens[i]
-        if tk in _CORRECAO:
+        if tk in idi.correcao:
             if grupos:
                 grupos.pop()
             i += 1
-        elif tk == "meia":
+        elif tk == "meia" and idi.codigo == "pt":
             grupos.append("6")
             i += 1
         else:
-            valor, prox = _ler_numero(tokens, i)
+            valor, prox = _ler_numero(tokens, i, idi)
             if valor is None:
                 i += 1
             else:
@@ -164,59 +149,83 @@ class Restricao:
         }.items() if v is not None}
 
 
-def _periodo_dominante(tokens) -> str | None:
+def _periodo_dominante(tokens, idi: Idioma = PT) -> str | None:
     """O período dito em qualquer ponto da frase, não só colado no número.
 
     "à noite, antes das oito" são oito da NOITE. Sem isto o 8 virava 08:00 e a
     restrição saía 18:00–08:00 — impossível.
     """
     for i, tk in enumerate(tokens):
-        if tk in _PERIODOS and (i == 0 or tokens[i - 1] in _PREPOSICOES):
+        if tk in idi.periodos and (i == 0 or tokens[i - 1] in idi.preposicoes):
             return tk
     return None
 
 
 def _ler_hora(tokens, i, permitir_minutos=True,
-              periodo_padrao=None) -> tuple[tuple[int, int] | None, int, bool]:
-    while i < len(tokens) and tokens[i] in _LIGACOES:
+              periodo_padrao=None, idi: Idioma = PT
+              ) -> tuple[tuple[int, int] | None, int, bool]:
+    while i < len(tokens) and tokens[i] in idi.ligacoes:
         i += 1
     if i >= len(tokens):
         return None, i, False
-    if tokens[i] == "meio" and i + 1 < len(tokens) and tokens[i + 1] == "dia":
-        return (12, 0), i + 2, False
-    if tokens[i] == "meia" and i + 1 < len(tokens) and tokens[i + 1] == "noite":
-        return (0, 0), i + 2, False
+    if _frase_em(tokens, i, idi.meio_dia):
+        return (12, 0), i + _tamanho_frase(idi.meio_dia), False
+    if _frase_em(tokens, i, idi.meia_noite):
+        return (0, 0), i + _tamanho_frase(idi.meia_noite), False
 
-    valor, prox = _ler_numero(tokens, i)
+    # "half past six" — o meio vem ANTES da hora em inglês, e depois dela em
+    # português ("seis e meia"). É a única diferença de ordem que o parser
+    # precisa conhecer.
+    meia_antes = False
+    if idi.prefixo_meia_hora and tokens[i:i + len(idi.prefixo_meia_hora)] == list(idi.prefixo_meia_hora):
+        meia_antes, i = True, i + len(idi.prefixo_meia_hora)
+        while i < len(tokens) and tokens[i] in idi.ligacoes:
+            i += 1
+
+    valor, prox = _ler_numero(tokens, i, idi)
     if valor is None or valor > 23:
         return None, i, False
-    hora, minuto = valor, 0
+    hora, minuto = valor, 30 if meia_antes else 0
 
-    if prox < len(tokens) and tokens[prox] in {"h", "hora", "horas"}:
+    if prox < len(tokens) and tokens[prox] in idi.sufixo_hora:
         prox += 1
-    if permitir_minutos and prox < len(tokens):
-        if tokens[prox] == "e":
-            if prox + 1 < len(tokens) and tokens[prox + 1] == "meia":
+    if permitir_minutos and not meia_antes and prox < len(tokens):
+        if tokens[prox] in idi.conector_minuto:
+            if prox + 1 < len(tokens) and tokens[prox + 1] in idi.meia_hora:
                 minuto, prox = 30, prox + 2
             else:
-                mv, mprox = _ler_numero(tokens, prox + 1)
+                mv, mprox = _ler_numero(tokens, prox + 1, idi)
                 if mv is not None and mv < 60:
                     minuto, prox = mv, mprox
         elif tokens[prox].isdigit() and len(tokens[prox]) == 2 and int(tokens[prox]) < 60:
             minuto, prox = int(tokens[prox]), prox + 1
+        elif idi.minuto_sem_conector:
+            # "six thirty": em inglês o minuto vem colado, sem conector. Só
+            # aceita palavra de número — senão "six doctors" viraria 6:00 e
+            # engoliria o substantivo seguinte.
+            tk = tokens[prox]
+            if tk in idi.extenso and 0 < idi.extenso[tk] < 60 and tk not in idi.dias_semana:
+                minuto, prox = idi.extenso[tk], prox + 1
 
-    j = prox
-    while j < len(tokens) and tokens[j] in {"da", "do", "de", "pela", "pelo"}:
-        j += 1
-    periodo = tokens[j] if j < len(tokens) and tokens[j] in _PERIODOS else None
-    if periodo:
-        prox = j + 1
-    elif periodo_padrao:
-        periodo = periodo_padrao      # o período da frase vale para esta hora
+    # "6pm" / "six pm": o sufixo faz o papel que em português cabe ao período.
+    periodo = None
+    if prox < len(tokens) and tokens[prox] in idi.sufixo_am_pm:
+        periodo, prox = idi.sufixo_am_pm[tokens[prox]], prox + 1
+
+    if periodo is None:
+        j = prox
+        while j < len(tokens) and tokens[j] in idi.prep_periodo:
+            j += 1
+        if j < len(tokens) and tokens[j] in idi.periodos:
+            periodo, prox = tokens[j], j + 1
+        elif periodo_padrao:
+            periodo = periodo_padrao      # o período da frase vale para esta hora
 
     ambiguo = False
-    if periodo in ("tarde", "noite") and hora < 12:
+    if periodo in _TARDINHA and hora < 12:
         hora += 12
+    elif periodo in _MANHA and hora == 12:
+        hora = 0                          # "12 am" é meia-noite
     elif periodo is None and 1 <= hora <= 6:
         # "depois das seis" em clínica é 18h. É um chute — bom, mas chute.
         # Marcar como ambíguo obriga o agente a confirmar em voz alta.
@@ -224,31 +233,49 @@ def _ler_hora(tokens, i, permitir_minutos=True,
     return (hora, minuto), prox, ambiguo
 
 
+# Os períodos que empurram uma hora pequena para a tarde/noite, nos dois
+# idiomas. Nomeados por valor e não por língua: é a semântica que decide.
+_TARDINHA = {"tarde", "noite", "afternoon", "evening", "night"}
+_MANHA = {"manha", "morning"}
+
+
+def _frase_em(tokens, i, frases: tuple[str, ...]) -> bool:
+    for frase in frases:
+        partes = frase.split()
+        if tokens[i:i + len(partes)] == partes:
+            return True
+    return False
+
+
+def _tamanho_frase(frases: tuple[str, ...]) -> int:
+    return len(frases[0].split())
+
+
 def _hhmm(h: int, m: int) -> str:
     return f"{h:02d}:{m:02d}"
 
 
-def _restricao_horaria(tokens) -> tuple[str | None, str | None, bool, set[int]]:
+def _restricao_horaria(tokens, idi: Idioma = PT
+                       ) -> tuple[str | None, str | None, bool, set[int]]:
     """Devolve também os índices consumidos.
 
     Sem isso, o "da tarde" de "depois das seis da tarde" era usado duas vezes:
     uma para desambiguar a hora (6 → 18) e outra como faixa do período — o que
     produzia a restrição impossível 18:00–17:59, com zero horários possíveis.
     """
-    texto = " ".join(tokens)
-    dominante = _periodo_dominante(tokens)
+    dominante = _periodo_dominante(tokens, idi)
     hora_min = hora_max = None
     ambigua = False
     consumidos: set[int] = set()
     i = 0
     while i < len(tokens):
         tk = tokens[i]
-        if tk == "entre":
-            a, prox, amb_a = _ler_hora(tokens, i + 1, False, dominante)
+        if tk == idi.entre:
+            a, prox, amb_a = _ler_hora(tokens, i + 1, False, dominante, idi)
             if a:
-                while prox < len(tokens) and tokens[prox] in {"e", "a", "as", "ate"}:
+                while prox < len(tokens) and tokens[prox] in idi.entre_conect:
                     prox += 1
-                b, prox, amb_b = _ler_hora(tokens, prox, False, dominante)
+                b, prox, amb_b = _ler_hora(tokens, prox, False, dominante, idi)
                 if b:
                     hora_min, hora_max = _hhmm(*a), _hhmm(*b)
                     # "entre duas e quatro DA TARDE": o período fecha as duas
@@ -257,15 +284,15 @@ def _restricao_horaria(tokens) -> tuple[str | None, str | None, bool, set[int]]:
                     consumidos.update(range(i, prox))
                     i = prox
                     continue
-        elif tk in _MARC_MIN:
-            h, prox, amb = _ler_hora(tokens, i + 1, True, dominante)
+        elif tk in idi.marc_min:
+            h, prox, amb = _ler_hora(tokens, i + 1, True, dominante, idi)
             if h:
                 hora_min, ambigua = _hhmm(*h), ambigua or amb
                 consumidos.update(range(i, prox))
                 i = prox
                 continue
-        elif tk in _MARC_MAX:
-            h, prox, amb = _ler_hora(tokens, i + 1, True, dominante)
+        elif tk in idi.marc_max:
+            h, prox, amb = _ler_hora(tokens, i + 1, True, dominante, idi)
             if h:
                 hora_max, ambigua = _hhmm(*h), ambigua or amb
                 consumidos.update(range(i, prox))
@@ -275,27 +302,28 @@ def _restricao_horaria(tokens) -> tuple[str | None, str | None, bool, set[int]]:
     if hora_min or hora_max:
         return hora_min, hora_max, ambigua, consumidos
 
-    # Sem marcador de faixa: horário exato ("às oito da manhã", "ao meio-dia").
-    if "meio dia" in texto:
-        return "12:00", "12:00", False, set(range(len(tokens)))
-    if "meia noite" in texto:
-        return "00:00", "00:00", False, set(range(len(tokens)))
+    # Sem marcador de faixa: horário exato ("às oito da manhã", "at noon").
+    for i, _tk in enumerate(tokens):
+        if _frase_em(tokens, i, idi.meio_dia):
+            return "12:00", "12:00", False, set(range(len(tokens)))
+        if _frase_em(tokens, i, idi.meia_noite):
+            return "00:00", "00:00", False, set(range(len(tokens)))
     for i, tk in enumerate(tokens):
-        if tk in {"as", "a", "ao", "aos"}:
-            h, prox, amb = _ler_hora(tokens, i + 1, True, dominante)
+        if tk in idi.marcador_exato:
+            h, prox, amb = _ler_hora(tokens, i + 1, True, dominante, idi)
             if h:
                 return _hhmm(*h), _hhmm(*h), amb, set(range(i, prox))
 
-    # Período do dia ("de manhã", "só à noite"). Exige preposição antes —
-    # senão "boa noite" e "boa tarde", que abrem literalmente toda ligação,
+    # Período do dia ("de manhã", "in the morning"). Exige preposição antes —
+    # senão "boa noite" e "good evening", que abrem literalmente toda ligação,
     # viravam restrição de horário em silêncio.
     for i, tk in enumerate(tokens):
-        if tk in _PERIODOS and (i == 0 or tokens[i - 1] in _PREPOSICOES):
-            return (*_PERIODOS[tk], False, {i})
+        if tk in idi.periodos and (i == 0 or tokens[i - 1] in idi.preposicoes):
+            return (*idi.periodos[tk], False, {i})
     return None, None, False, set()
 
 
-def _completar_com_periodo(tokens, hora_min, hora_max, consumidos):
+def _completar_com_periodo(tokens, hora_min, hora_max, consumidos, idi: Idioma = PT):
     """'de manhã, antes das onze' são duas informações, não uma.
 
     O limite explícito manda na sua ponta; o período preenche a que sobrou.
@@ -306,9 +334,9 @@ def _completar_com_periodo(tokens, hora_min, hora_max, consumidos):
         return hora_min, hora_max
     for i, tk in enumerate(tokens):
         # Um período já usado para desambiguar a hora não vale de novo como faixa.
-        if (tk in _PERIODOS and i not in consumidos
-                and (i == 0 or tokens[i - 1] in _PREPOSICOES)):
-            inicio, fim = _PERIODOS[tk]
+        if (tk in idi.periodos and i not in consumidos
+                and (i == 0 or tokens[i - 1] in idi.preposicoes)):
+            inicio, fim = idi.periodos[tk]
             return hora_min or inicio, hora_max or fim
     return hora_min, hora_max
 
@@ -323,41 +351,42 @@ def _proximo_dia(hoje: date, alvo: int, semana_seguinte: bool) -> date:
     return d
 
 
-def _restricao_temporal(tokens, hoje: date):
+def _restricao_temporal(tokens, hoje: date, idi: Idioma = PT):
     texto = " ".join(tokens)
-    proxima = ("que vem" in texto) or ("proxima" in texto) or ("proximo" in texto)
-    mes_que_vem = "mes que vem" in texto or "proximo mes" in texto
+    proxima = any(marca in texto for marca in idi.marcas_proxima)
+    mes_que_vem = any(marca in texto for marca in idi.marcas_mes_que_vem)
 
-    if "depois de amanha" in texto:
-        d = hoje + timedelta(days=2)
-        return d.isoformat(), d.isoformat(), None
-    if "amanha" in texto:
-        d = hoje + timedelta(days=1)
-        return d.isoformat(), d.isoformat(), None
-    if "hoje" in texto:
-        return hoje.isoformat(), hoje.isoformat(), None
-    if "semana que vem" in texto or "proxima semana" in texto:
+    # As relativas vão da mais longa para a mais curta: "day after tomorrow"
+    # contém "tomorrow", e testar na ordem errada devolve amanhã.
+    for frase, offset in sorted(idi.relativas.items(), key=lambda kv: -len(kv[0])):
+        if frase in texto:
+            d = hoje + timedelta(days=offset)
+            return d.isoformat(), d.isoformat(), None
+    if any(frase in texto for frase in idi.semana_que_vem):
         inicio = hoje + timedelta(days=7 - hoje.weekday())
         return inicio.isoformat(), (inicio + timedelta(days=6)).isoformat(), None
 
-    # "dia quinze", "dia 15 do mês que vem", "quinze de outubro"
+    # "dia quinze", "quinze de outubro", "October fifteenth", "the 15th of May"
     for i, tk in enumerate(tokens):
         numero = mes = None
-        if tk == "dia":
-            numero, prox = _ler_numero(tokens, i + 1)
+        if tk in idi.marcador_dia:
+            numero, prox = _ler_numero(tokens, i + 1, idi)
             if numero is not None:
                 j = prox
-                while j < len(tokens) and tokens[j] in {"de", "do", "da"}:
+                while j < len(tokens) and tokens[j] in idi.prep_data:
                     j += 1
-                if j < len(tokens) and tokens[j] in MESES:
-                    mes = MESES[tokens[j]]
-        elif tk in MESES:
-            mes = MESES[tk]
+                if j < len(tokens) and tokens[j] in idi.meses:
+                    mes = idi.meses[tokens[j]]
+        elif tk in idi.meses:
+            mes = idi.meses[tk]
             for recuo in (1, 2):          # "quinze outubro" e "quinze de outubro"
                 if i - recuo >= 0:
-                    numero, _ = _ler_numero(tokens, i - recuo)
+                    numero, _ = _ler_numero(tokens, i - recuo, idi)
                     if numero is not None:
                         break
+            if numero is None and idi.dia_apos_mes:
+                # "October fifteenth": em inglês o dia vem depois do mês.
+                numero, _ = _ler_numero(tokens, i + 1, idi)
         if numero is None or not 1 <= numero <= 31:
             continue
         ano, mes_alvo = hoje.year, mes
@@ -373,7 +402,7 @@ def _restricao_temporal(tokens, hoje: date):
             continue
         return d.isoformat(), d.isoformat(), None
 
-    dias = tuple(sorted({DIAS_SEMANA[t] for t in tokens if t in DIAS_SEMANA}))
+    dias = tuple(sorted({idi.dias_semana[t] for t in tokens if t in idi.dias_semana}))
     if not dias:
         return None, None, None
     if proxima and len(dias) == 1:
@@ -382,28 +411,22 @@ def _restricao_temporal(tokens, hoje: date):
     return None, None, dias
 
 
-_NOMES_DIA = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
-
-
-# Falar do passado não é pedir horário. Sem isto, cada ligação de cadastro
-# entrava na agenda filtrada pela data de nascimento de quem ligou.
-MARCAS_DE_PASSADO = {"nasci", "nascida", "nascido", "nascimento", "aniversario"}
-
-
-def interpretar_restricao(texto: str, hoje: date | None = None) -> Restricao:
+def interpretar_restricao(texto: str, hoje: date | None = None,
+                          idi: Idioma = PT) -> Restricao:
     """Converte a fala do paciente em filtros para `consultar_agenda`."""
     hoje = hoje or date.today()
     tokens = tokenizar(texto)
-    hora_min, hora_max, ambigua, consumidos = _restricao_horaria(tokens)
-    hora_min, hora_max = _completar_com_periodo(tokens, hora_min, hora_max, consumidos)
-    if MARCAS_DE_PASSADO & set(tokens):
+    hora_min, hora_max, ambigua, consumidos = _restricao_horaria(tokens, idi)
+    hora_min, hora_max = _completar_com_periodo(tokens, hora_min, hora_max,
+                                                consumidos, idi)
+    if idi.marcas_passado & set(tokens):
         # "nasci em quinze de março de oitenta" traz uma data que não é um
         # pedido de agenda — e o extrator de datas empurrava esse 15 de março
         # para o futuro, filtrando a agenda inteira pelo aniversário da pessoa.
         # Ninguém marca consulta dizendo quando nasceu.
         data_inicio = data_fim = dias = None
     else:
-        data_inicio, data_fim, dias = _restricao_temporal(tokens, hoje)
+        data_inicio, data_fim, dias = _restricao_temporal(tokens, hoje, idi)
 
     if hora_min and hora_max and hora_min > hora_max:
         # Não deveria acontecer — há um teste de propriedade contra isso. Se
@@ -413,30 +436,35 @@ def interpretar_restricao(texto: str, hoje: date | None = None) -> Restricao:
 
     return Restricao(hora_min, hora_max, dias, data_inicio, data_fim, ambigua,
                      descrever_restricao(hora_min, hora_max, dias,
-                                         data_inicio, data_fim))
+                                         data_inicio, data_fim, idi))
 
 
-def descrever_restricao(hora_min, hora_max, dias, data_inicio, data_fim) -> str:
-    """Frase PT-BR do que foi entendido. O agente lê isto de volta em voz alta
-    quando a interpretação foi um chute."""
+def descrever_restricao(hora_min, hora_max, dias, data_inicio, data_fim,
+                        idi: Idioma = PT) -> str:
+    """Frase do que foi entendido, na língua da ligação. O agente lê isto de
+    volta em voz alta quando a interpretação foi um chute."""
+    en = idi.codigo == "en"
     partes = []
     if hora_min and hora_max and hora_min == hora_max:
-        partes.append(f"às {hora_min}")
+        partes.append(f"at {hora_min}" if en else f"às {hora_min}")
     else:
         if hora_min:
-            partes.append(f"a partir das {hora_min}")
+            partes.append(f"from {hora_min}" if en else f"a partir das {hora_min}")
         if hora_max:
-            partes.append(f"até as {hora_max}")
+            partes.append(f"until {hora_max}" if en else f"até as {hora_max}")
     if dias:
-        partes.append(" ou ".join(_NOMES_DIA[d] for d in dias))
+        nomes = [idi.nomes_dia[d] for d in dias]
+        partes.append((" or " if en else " ou ").join(nomes))
     if data_inicio and data_fim and data_inicio == data_fim:
-        partes.append(f"em {data_inicio}")
+        partes.append(f"on {data_inicio}" if en else f"em {data_inicio}")
     elif data_inicio:
-        partes.append(f"entre {data_inicio} e {data_fim}")
+        partes.append(f"between {data_inicio} and {data_fim}" if en
+                      else f"entre {data_inicio} e {data_fim}")
     return ", ".join(partes)
 
 
-def mesclar_restricoes(atual: Restricao, nova: Restricao) -> Restricao:
+def mesclar_restricoes(atual: Restricao, nova: Restricao,
+                       idi: Idioma = PT) -> Restricao:
     """Combina o que o paciente já disse com o que acabou de dizer.
 
     Por grupo, não por campo: quem menciona horário substitui o horário
@@ -455,13 +483,14 @@ def mesclar_restricoes(atual: Restricao, nova: Restricao) -> Restricao:
     return Restricao(
         hora_min, hora_max, dias, data_inicio, data_fim,
         nova.ambigua if tem_hora else atual.ambigua,
-        descrever_restricao(hora_min, hora_max, dias, data_inicio, data_fim))
+        descrever_restricao(hora_min, hora_max, dias, data_inicio, data_fim, idi))
 
 
 IDADE_MAXIMA = 120
 
 
-def normalizar_nascimento(texto: str, hoje: date | None = None) -> str | None:
+def normalizar_nascimento(texto: str, hoje: date | None = None,
+                          idi: Idioma = PT) -> str | None:
     """Data de nascimento falada → AAAA-MM-DD, ou None se não der para ler.
 
     Aceita o que as pessoas realmente dizem: "quinze de março de oitenta",
@@ -477,11 +506,11 @@ def normalizar_nascimento(texto: str, hoje: date | None = None) -> str | None:
     numeros, mes_nomeado = [], None
     i = 0
     while i < len(tokens):
-        if tokens[i] in MESES:
-            mes_nomeado = MESES[tokens[i]]
+        if tokens[i] in idi.meses:
+            mes_nomeado = idi.meses[tokens[i]]
             i += 1
             continue
-        valor, prox = _ler_numero(tokens, i)
+        valor, prox = _ler_numero(tokens, i, idi)
         if valor is None:
             i += 1
             continue
@@ -559,17 +588,28 @@ def ler_digitos(digitos: str, formato: str | None = None) -> str:
     return ", ".join(p for p in saida if p)
 
 
-def casar_especialidade(falado: str, catalogo: list[str]) -> str | None:
+def casar_especialidade(falado: str, catalogo: list[str],
+                        idi: Idioma = PT) -> str | None:
     """'ortopedista' é Ortopedia. O paciente fala a profissão, não a área.
 
     Descoberto no primeiro smoke test contra um modelo de verdade: ele chamou
     consultar_agenda(especialidade="ortopedista") e a busca exata devolveu
     "não atendemos".
+
+    O apelido por idioma veio depois, da eval em inglês: "orthopedist" não casa
+    com "Ortopedia" nem por prefixo — "ortho" contra "ortop". As outras três
+    passavam por acidente ("derma", "cardi", "neuro" coincidem nas duas
+    línguas), o que é pior do que falhar: a regra parecia funcionar.
     """
     alvo = sem_acento(falado)
     for nome in catalogo:
         if sem_acento(nome) == alvo:
             return nome
+    apelido = idi.especialidades.get(alvo)
+    if apelido:
+        for nome in catalogo:
+            if sem_acento(nome) == sem_acento(apelido):
+                return nome
     if len(alvo) >= 5:
         for nome in catalogo:
             if sem_acento(nome)[:5] == alvo[:5]:

@@ -126,7 +126,8 @@
   <main class="painel">
     <h2>Ligação</h2>
     <div id="conversa"><p class="vazio">Segure o botão e fale.<br>
-      Experimente: “queria marcar um ortopedista, mas só consigo depois das seis”.</p></div>
+      Experimente: “queria marcar um ortopedista, mas só consigo depois das seis”<br>
+      ou, em inglês: “I need an orthopedist, but I can only do after six”.</p></div>
     <div class="controles">
       <button id="falar" disabled><span class="ponto"></span><span id="rotuloFalar">Segure para falar</span></button>
       <span class="dica">ou segure <kbd>espaço</kbd></span>
@@ -135,6 +136,15 @@
     <div class="modo">
       <label><input type="checkbox" id="maosLivres"> mãos livres — o VAD abre e
         fecha o turno, e falar por cima interrompe o agente</label>
+    </div>
+    <div class="modo">
+      <label>idioma da ligação
+        <select id="idioma">
+          <option value="pt" selected>português</option>
+          <option value="en">English</option>
+        </select></label>
+      <span class="dica">no primeiro turno não há fala para detectar; depois o
+        agente segue quem ligou</span>
     </div>
     <div class="vad" id="vad" hidden>
       <div class="medidor"><div class="nivel" id="nivel"></div>
@@ -348,7 +358,8 @@ async function novaLigacao(){
   try{
     $("#estadoLigacao").textContent = "chamando…";
     await tocarChamada();
-    const r = await fetch("/nova", {method:"POST"});
+    const r = await fetch("/nova", {method:"POST",
+      headers:{"X-Idioma": $("#idioma").value}});
     const d = await r.json();
     ligacao = d.ligacao;
     $("#estadoLigacao").textContent = ligacao;

@@ -42,9 +42,11 @@ class TTSFalso:
     def __init__(self, pasta: Path):
         self.pasta = pasta
         self.falas: list[str] = []
+        self.vozes: list[str] = []      # a voz usada em cada fala
 
-    def falar(self, texto: str, destino: Path) -> Audio:
+    def falar(self, texto: str, destino: Path, idi=None) -> Audio:
         self.falas.append(texto)
+        self.vozes.append(idi.voz_tts if idi else "padrao")
         _wav_silencioso(destino, 0.5)
         return Audio(destino, 0.5, 12.0)
 
@@ -54,8 +56,10 @@ class STTFalso:
 
     def __init__(self, texto="queria marcar um ortopedista depois das seis"):
         self.texto = texto
+        self.idiomas: list[str] = []    # o idioma pedido em cada transcrição
 
-    def transcrever(self, caminho: Path, **_kw) -> Transcricao:
+    def transcrever(self, caminho: Path, *, idioma="pt", **_kw) -> Transcricao:
+        self.idiomas.append(idioma)
         return Transcricao(self.texto, 42.0, 1.0)
 
 
