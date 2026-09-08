@@ -161,12 +161,12 @@
 
     <rect class="d-caixa" x="342" y="34" width="132" height="72" rx="12"/>
     <text class="d-rot" x="358" y="60">Orquestrador</text>
-    <text class="d-sub" x="358" y="76">LLM + 6 tools</text>
+    <text class="d-sub" x="358" y="76">LLM + 7 tools</text>
     <text class="d-num" x="358" y="94">1 446 ms</text>
 
     <rect class="d-caixa-forte" x="486" y="34" width="132" height="72" rx="12"/>
     <text class="d-rot" x="502" y="60">Validador</text>
-    <text class="d-sub" x="502" y="76">10 regras</text>
+    <text class="d-sub" x="502" y="76">13 regras</text>
     <text class="d-num-forte" x="502" y="94">0,084 ms</text>
 
     <rect class="d-caixa-forte" x="630" y="34" width="132" height="72" rx="12"/>
@@ -217,13 +217,13 @@ número; nada mais derruba.</figcaption>
 <h2>O portão</h2>
 <div class="prosa">
   <p>Nenhuma ferramenta de escrita é chamada direto pelo modelo. Ele emite uma
-  <strong>intenção</strong> — uma proposta — e dez regras em código decidem se
+  <strong>intenção</strong> — uma proposta — e treze regras em código decidem se
   ela vira linha no banco.</p>
   <p>A seta que não existe é a parte importante do desenho.</p>
 </div>
 
 <figure>
-<svg viewBox="0 0 960 410" role="img" aria-label="O orquestrador não escreve no banco diretamente: essa seta está riscada. Ele emite uma intenção que passa por dez regras de validação antes das ferramentas gravarem; quando reprovada, a intenção volta para o agente re-propor.">
+<svg viewBox="0 0 960 470" role="img" aria-label="O orquestrador não escreve no banco diretamente: essa seta está riscada. Ele emite uma intenção que passa por treze regras de validação antes das ferramentas gravarem; quando reprovada, a intenção volta para o agente re-propor.">
   <defs>
     <marker id="s2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
             markerHeight="6" orient="auto-start-reverse">
@@ -246,13 +246,13 @@ número; nada mais derruba.</figcaption>
   <!-- fluxo real -->
   <rect class="d-caixa" x="18" y="170" width="132" height="72" rx="12"/>
   <text class="d-rot" x="34" y="200">Orquestrador</text>
-  <text class="d-sub" x="34" y="218">LLM + 6 tools</text>
+  <text class="d-sub" x="34" y="218">LLM + 7 tools</text>
 
   <rect class="d-caixa" x="220" y="170" width="100" height="72" rx="12"/>
   <text class="d-rot" x="236" y="200">Intenção</text>
   <text class="d-sub" x="236" y="218">proposta</text>
 
-  <rect class="d-caixa-forte" x="390" y="80" width="228" height="272" rx="14"/>
+  <rect class="d-caixa-forte" x="390" y="80" width="228" height="340" rx="14"/>
   <text class="d-rot" x="406" y="108">Validador</text>
   <text class="d-regra" x="406" y="136">R1 · chave de idempotência</text>
   <text class="d-regra" x="406" y="158">R2 · cadastro existe</text>
@@ -264,6 +264,9 @@ número; nada mais derruba.</figcaption>
   <text class="d-regra-forte" x="406" y="290">R8 · confirmação verbal bate</text>
   <text class="d-regra" x="406" y="312">R9 · o slot foi oferecido</text>
   <text class="d-regra" x="406" y="334">R10 · origem do reagendamento</text>
+  <text class="d-regra" x="406" y="356">R11 · a ficha tem todos os campos</text>
+  <text class="d-regra" x="406" y="378">R12 · o CPF fecha os dígitos</text>
+  <text class="d-regra" x="406" y="400">R13 · o CPF não está em uso</text>
 
   <rect class="d-caixa" x="688" y="170" width="88" height="72" rx="12"/>
   <text class="d-rot" x="704" y="200">tools</text>
@@ -427,7 +430,7 @@ a vaga para o próximo da fila.</figcaption>
   não é. É exatamente por isso que a confirmação dígito-a-dígito existe.</p>
 </div>
 
-<h3>Suíte de eval — 40 cenários em 7 famílias</h3>
+<h3>Suíte de eval — 41 cenários em 7 famílias</h3>
 <div class="tabela">
 <table>
   <tr><th>agente</th><th class="n">resultado</th></tr>
@@ -585,7 +588,7 @@ paciente: E vocês aceitam Unimed?
 <div class="rodape">
   Voice Agent Assistant · código em
   <a href="https://github.com/FilipeAlmeidaPro/voice-agent-assistant">github.com/FilipeAlmeidaPro/voice-agent-assistant</a>
-  · MIT · 213 testes, zero dependências · nenhum dado real: os 40 pacientes, os CPFs com dígito verificador
+  · MIT · 274 testes, zero dependências · nenhum dado real: os 40 pacientes, os CPFs com dígito verificador
   válido e a agenda inteira são gerados por <code>Random(42)</code>.
 </div>
 </div>

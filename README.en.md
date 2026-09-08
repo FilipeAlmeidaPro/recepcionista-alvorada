@@ -3,9 +3,10 @@
 A Brazilian-Portuguese voice agent that books appointments for a
 multi-specialty clinic. The demo clinic — **Clínica Alvorada** — is fictional,
 and the 40 patients, their ID numbers and the whole calendar come from
-`Random(42)`. It identifies the caller, understands a spoken
-constraint, queries a real calendar, offers a slot, confirms out loud, and
-writes — or escalates to a human when that's the right call.
+`Random(42)`. It identifies the caller — or opens the record right
+there, if it's a first call — understands a spoken constraint, queries a real
+calendar, offers a slot, confirms out loud, and writes. Or escalates to a
+human, when that's the right call.
 
 *[Versão em português](README.md)* · **[Architecture →](https://claude.ai/code/artifact/8e4cad9f-5b25-4a44-b1da-aa158f092b54)** · **[Who checks whom →](https://claude.ai/code/artifact/07ffe974-f74d-48f3-80cc-4c072503a993)** ([sources](docs/))
 
@@ -34,8 +35,8 @@ things with reliability numbers attached beats one that does twelve with none.
 ```bash
 git clone <this-repo> && cd voice-agent-assistant
 python3 -m clinica.seed --data-base 2026-09-03   # builds data/clinica.db
-python3 -m unittest discover -s . -t .           # 210 tests
-python3 -m avaliacao --provedor simulado         # 40 scenarios, no LLM, US$ 0
+python3 -m unittest discover -s . -t .           # 274 tests
+python3 -m avaliacao --provedor simulado         # 41 scenarios, no LLM, US$ 0
 ```
 
 **Zero dependencies.** `sqlite3`, `unittest`, `urllib` and `wave` are stdlib.
@@ -120,17 +121,19 @@ drops from **90% to 60%**.
     └───────────────┬───────────────┘
                     ▼
     ┌───────────────────────────────┐
-    │ Orchestrator (LLM + 6 tools)  │  Groq / Gemini  1,446 ms
+    │ Orchestrator (LLM + 7 tools)  │  Groq / Gemini  1,446 ms
     │        ↓ proposes an intent   │
     └───────────────┬───────────────┘
                     ▼
     ┌───────────────────────────────┐
-    │ VALIDATOR — 10 rules          │  deterministic   0.084 ms
-    │ R1 key       R6 specialty     │
-    │ R2 patient   R7 constraint    │
-    │ R3 slot      R8 confirmation ★│
-    │ R4 future    R9 was offered   │
-    │ R5 free      R10 origin       │
+    │ VALIDATOR — 13 rules          │  deterministic   0.084 ms
+    │ R1 key       R8 confirmation ★│
+    │ R2 patient   R9 was offered   │
+    │ R3 slot      R10 origin       │
+    │ R4 future    R11 fields       │
+    │ R5 free      R12 ID digits    │
+    │ R6 specialty R13 duplicate    │
+    │ R7 constraint                 │
     └───────────────┬───────────────┘
                     ▼            ╳ rejected → the agent explains and re-proposes
     ┌───────────────────────────────┐
@@ -230,6 +233,52 @@ never touches an appointment.
 
 ---
 
+## Registration by voice
+
+A first-time caller isn't turned away: the agent opens the record during the
+call itself — name, phone, ID number, date of birth — and books right after.
+
+The write is a **proposal**, same as a booking. Three new rules apply:
+
+| Rule | What it prevents |
+|---|---|
+| **R11 fields** | a record born without full name, phone, ID or birth date |
+| **R12 ID digits** | a document whose check digits don't close |
+| **R13 duplicate** | one ID number registered under two names |
+
+Plus R8 again, now with the record's entities: the agent must have read the
+name and the ID number **out loud** and heard a yes. If the number it spoke
+isn't the number it was about to write, the write doesn't happen.
+
+R12 is code and not prompt for a plain reason: the model can't compute a check
+digit, and a fabricated ID raises no error at all. It simply exists — and
+collides, years later, with someone's real record.
+
+Repeating the same registration is idempotent, not a conflict. The network
+drops, the patient confirms twice; answering *"that ID is already registered"*
+to the very person who just dictated it would be a bug wearing the costume of
+a safeguard.
+
+### What the registration scenario found
+
+Writing scenario A2 cost three bugs, all real:
+
+| Finding | Consequence |
+|---|---|
+| `1980-03-15` was rejected by the date normalizer | the format the **model** emits in a date field failed registration with "missing fields" — every field correct and in hand |
+| `"nasci em quinze de março de oitenta"` became a calendar constraint | every registration call filtered the calendar by the caller's **birthday**, and found no slot at all |
+| `"Is that right? (awaiting response)"` went straight to TTS | the model narrating its own control flow, read aloud as "open parenthesis awaiting response" |
+
+The third is the validator's idea applied to the output: ask by prompt,
+**check in code**.
+
+In the eval the model still tried to register before it had the ID number — and
+R12 blocked it. It recovered, asked for the number, and finished the call. That
+is exactly the behavior the gate exists to produce: the model errs, the code
+holds, the call goes on.
+
+---
+
 ## Multi-agent orchestration — and what it failed to prove
 
 ```
@@ -241,7 +290,7 @@ never touches an appointment.
               ▼                                        ▼
    ┌──────────────────────┐              ┌──────────────────────┐
    │ Orchestrator         │              │ Risk guardian        │
-   │ 6 tools · ~3,000 tok │              │ 1 question · ~80 tok │
+   │ 7 tools · ~3,000 tok │              │ 1 question · ~80 tok │
    │ 1,000–1,500 ms       │              │ 615 ms · disappears  │
    └──────────┬───────────┘              └──────────┬───────────┘
               │                                     │ risk?
@@ -298,7 +347,7 @@ costs the larger of the two times rather than their sum.
 
 All measured in this repository, none estimated.
 
-### Eval suite — 40 scenarios in 7 families
+### Eval suite — 41 scenarios in 7 families
 
 Happy path, scope limits, clinical risk, calendar, identity, confirmation,
 dialogue robustness. The assertion is never about the text the LLM produced —
@@ -313,7 +362,7 @@ survive.
 | Groq `gpt-oss-120b` | A1–E2 (28) | **24/28** |
 | Groq `gpt-oss-20b` | E3–F7 (12) | **8/12** |
 
-**All 40 scenarios have now run against a real LLM.** But across two different
+**All 41 scenarios have now run against a real LLM.** But across two different
 models, because the daily quota doesn't fit 40 in one go — which is why I
 **don't add the two numbers up**. 24/28 and 8/12 measure different models;
 writing "32/40" would invent a run that never happened.
@@ -475,7 +524,7 @@ Three conclusions only the audio suite can produce:
 | **full turn** | **2,764 ms** | **3.5× the target** |
 | normalizer | 0.005 ms | statistical noise |
 | calendar query (819 slots) | 0.068 ms | statistical noise |
-| validator, 10 rules | 0.084 ms | statistical noise |
+| validator, 13 rules | 0.084 ms | statistical noise |
 
 Across the 28-call run (139 turns), the full turn measured **p50 1,212 ms,
 p95 2,543 ms** — discarding 27 turns polluted by rate-limit waiting. With them
@@ -530,6 +579,10 @@ Each of these is a real bug, caught by a specific layer.
 | `"depois DAR seis"` — STT swaps a function word and the parser breaks | audio suite |
 | `"de manhã, antes das onze"` returned only `until 11:00` | audio suite |
 
+Three more, all found while writing the registration scenario — ISO date
+rejected, birth date turning into a calendar filter, and a stage direction
+sent to the TTS: [Registration by voice](#registration-by-voice).
+
 The panel one deserves a note: **the test was passing.** It only forbade
 `propor_reserva`, and the agent indeed didn't book. But continuing to serve
 after escalating clinical risk is worse than never escalating. The only way to
@@ -564,9 +617,9 @@ communicated by color alone.
 clinica/
   db.py            schema, privacy masking, PT-BR date/time rendering
   seed.py          catalogue, 3 weeks of calendar, deterministic occupancy
-  tools.py         the 6 tools
+  tools.py         the 7 tools
   normalizador.py  spoken constraints, dictated digits, names, voice output
-  validador.py     the 10 rules — the write gate
+  validador.py     the 13 rules — the write gate
   agente.py        call orchestrator
   provedor.py      LLM interface (Groq/Gemini), retry, quota handling
   voz.py           TTS (say) and STT (Whisper), with per-stage timing
@@ -579,7 +632,7 @@ clinica/
 web/index.html     the page: push-to-talk and the live trace
 
 avaliacao/
-  cenarios.py      40 scenarios in 7 families
+  cenarios.py      41 scenarios in 7 families
   paciente.py      scripted caller and synthetic caller
   runner.py        executes and judges
   simulado.py      rule-based receptionist — baseline without an LLM
@@ -588,10 +641,10 @@ avaliacao/
   painel.py        HTML panel
   relatorio.py     aggregate metrics
 
-tests/             210 tests, stdlib
+tests/             274 tests, stdlib
 ```
 
-**25 modules, 7,631 lines.** Database: 4 specialties, 6 professionals,
+**35 modules, 9,076 lines**, tests included. Database: 4 specialties, 6 professionals,
 40 patients, 819 slots across 3 weeks.
 
 Scarcity in the seed is designed, not random: **only Dra. Thaís Bittencourt

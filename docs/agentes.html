@@ -157,7 +157,7 @@
   <!-- orquestrador -->
   <rect class="d-modelo" x="340" y="148" width="212" height="84" rx="13"/>
   <text class="d-rot" x="356" y="176">Orquestrador</text>
-  <text class="d-sub" x="356" y="194">6 ferramentas · 348 linhas</text>
+  <text class="d-sub" x="356" y="194">7 ferramentas · 388 linhas</text>
   <text class="d-num-modelo" x="356" y="216">o único com ferramentas</text>
 
   <!-- normalizador -->
@@ -170,7 +170,7 @@
   <!-- validador e banco -->
   <rect class="d-det" x="632" y="148" width="234" height="84" rx="13"/>
   <text class="d-rot" x="648" y="176">Validador</text>
-  <text class="d-sub" x="648" y="194">10 regras · 398 linhas</text>
+  <text class="d-sub" x="648" y="194">13 regras · 515 linhas</text>
   <text class="d-num-det" x="648" y="216">aprova ou bloqueia</text>
   <path class="d-eixo" marker-end="url(#a1)" d="M552,190 L628,190"/>
   <text class="d-sub" x="590" y="182" text-anchor="middle">intenção</text>
@@ -184,7 +184,7 @@
   <!-- juiz -->
   <rect class="d-det" x="34" y="298" width="220" height="58" rx="11"/>
   <text class="d-rot" x="50" y="322">Juiz</text>
-  <text class="d-sub" x="50" y="340">40 cenários · 232 linhas</text>
+  <text class="d-sub" x="50" y="340">41 cenários · 429 linhas</text>
   <path class="d-eixo" marker-end="url(#a1)" d="M144,294 L144,258 L392,258 L392,236"/>
   <text class="d-sub" x="200" y="250">mede o que aconteceu</text>
 
@@ -235,7 +235,7 @@ não pelo modelo</b>. É a fala mais importante que o sistema produz, e é a
 
   <rect class="d-modelo" x="40" y="132" width="260" height="86" rx="13"/>
   <text class="d-rot" x="58" y="158">Orquestrador</text>
-  <text class="d-sub" x="58" y="176">6 ferramentas · ~3 000 tokens</text>
+  <text class="d-sub" x="58" y="176">7 ferramentas · ~3 000 tokens</text>
   <text class="d-num-modelo" x="58" y="200">1 000–1 500 ms</text>
 
   <rect class="d-modelo" x="590" y="132" width="260" height="86" rx="13"/>
@@ -325,11 +325,11 @@ prova</b>. Uma família de sete cenários cabe na cota de um dia.</figcaption>
 <table>
   <tr><th>agente</th><th>papel</th><th>motor</th><th class="n">tamanho</th></tr>
   <tr><td class="forte">Orquestrador</td>
-      <td>conduz a ligação, chama 6 ferramentas, propõe escritas</td>
-      <td><span class="tag modelo">LLM</span></td><td class="n">348</td></tr>
+      <td>conduz a ligação, chama 7 ferramentas, propõe escritas</td>
+      <td><span class="tag modelo">LLM</span></td><td class="n">388</td></tr>
   <tr><td class="forte">Paciente sintético</td>
       <td>liga com objetivo privado e personalidade; não segue roteiro</td>
-      <td><span class="tag modelo">LLM</span></td><td class="n">98</td></tr>
+      <td><span class="tag modelo">LLM</span></td><td class="n">113</td></tr>
   <tr><td class="forte">Guardião de risco</td>
       <td>uma pergunta por turno, em paralelo: há sinal de risco nesta frase?</td>
       <td><span class="tag modelo">LLM</span></td><td class="n">—</td></tr>
@@ -341,13 +341,13 @@ prova</b>. Uma família de sete cenários cabe na cota de um dia.</figcaption>
       <td><span class="tag modelo">LLM</span></td><td class="n">—</td></tr>
   <tr><td class="forte">Supervisor</td>
       <td>coordena os especialistas; roda o guardião em paralelo e preempta</td>
-      <td><span class="tag det">código</span></td><td class="n">265</td></tr>
+      <td><span class="tag det">código</span></td><td class="n">263</td></tr>
   <tr><td class="forte">Validador</td>
-      <td>10 regras entre a proposta do modelo e o banco</td>
-      <td><span class="tag det">código</span></td><td class="n">398</td></tr>
+      <td>13 regras entre a proposta do modelo e o banco</td>
+      <td><span class="tag det">código</span></td><td class="n">515</td></tr>
   <tr><td class="forte">Juiz</td>
-      <td>julga 40 cenários pelo que aconteceu, não pelo texto</td>
-      <td><span class="tag det">código</span></td><td class="n">232</td></tr>
+      <td>julga 41 cenários pelo que aconteceu, não pelo texto</td>
+      <td><span class="tag det">código</span></td><td class="n">264</td></tr>
   <tr><td class="forte">Baseline de regras</td>
       <td>recepcionista sem LLM; prova que o juiz reprova agente ruim</td>
       <td><span class="tag det">código</span></td><td class="n">149</td></tr>
@@ -355,7 +355,7 @@ prova</b>. Uma família de sete cenários cabe na cota de um dia.</figcaption>
 </div>
 <div class="prosa">
   <p>Mais dois que decidem sem serem agentes: o <strong>normalizador</strong>
-  (562 linhas) converte fala em filtro, e o <strong>VAD</strong> (137 linhas)
+  (667 linhas) converte fala em filtro, e o <strong>VAD</strong> (137 linhas)
   decide quando o turno acabou. Nenhum dos dois inventa.</p>
 </div>
 
@@ -386,7 +386,7 @@ prova</b>. Uma família de sete cenários cabe na cota de um dia.</figcaption>
 
 <div class="nota aviso">
   <p><strong>Nenhum LLM é obrigatório para rodar o projeto.</strong> Sem chave
-  nenhuma: 213 testes passam, os 40 cenários rodam contra o baseline de regras,
+  nenhuma: 274 testes passam, os 41 cenários rodam contra o baseline de regras,
   e o benchmark de entidade compara regex contra normalizador. O LLM entra para
   medir <em>o modelo</em>, não para o sistema funcionar.</p>
 </div>
@@ -426,6 +426,6 @@ prova</b>. Uma família de sete cenários cabe na cota de um dia.</figcaption>
 <div class="rodape">
   Voice Agent Assistant ·
   <a href="https://github.com/FilipeAlmeidaPro/voice-agent-assistant">github.com/FilipeAlmeidaPro/voice-agent-assistant</a>
-  · 213 testes, zero dependências · todos os números medidos neste repositório.
+  · 274 testes, zero dependências · todos os números medidos neste repositório.
 </div>
 </div>

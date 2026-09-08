@@ -2,9 +2,10 @@
 
 Agente de voz para agendamento em clínica multidisciplinar, em português do
 Brasil. A clínica da demo — **Clínica Alvorada** — é fictícia, e os 40
-pacientes, os CPFs e a agenda inteira são gerados por `Random(42)`. Ele identifica o paciente, entende uma restrição falada, consulta a
-agenda real, propõe horário, confirma em voz alta e grava — ou transfere para
-um humano quando é o certo a fazer.
+pacientes, os CPFs e a agenda inteira são gerados por `Random(42)`. Ele
+identifica o paciente — ou abre a ficha na hora, se for a primeira ligação —,
+entende uma restrição falada, consulta a agenda real, propõe horário, confirma
+em voz alta e grava. Ou transfere para um humano, quando é o certo a fazer.
 
 *[English version](README.en.md)* · **[Arquitetura →](https://claude.ai/code/artifact/163f86c8-fe48-46af-8029-563ef00dbcb7)** · **[Quem confere quem →](https://claude.ai/code/artifact/ba4ef3ef-7ceb-4c8b-8c12-b49c76225e7f)** ([fontes](docs/)) · *[in English](https://claude.ai/code/artifact/8e4cad9f-5b25-4a44-b1da-aa158f092b54)*
 
@@ -19,7 +20,7 @@ O cenário que o projeto persegue é um só, feito a fundo:
 **O modelo propõe; o código escreve.**
 
 Nenhuma ferramenta de escrita é chamada direto pelo LLM. Ele emite uma
-*intenção*, e um validador determinístico confere dez regras antes de qualquer
+*intenção*, e um validador determinístico confere treze regras antes de qualquer
 coisa tocar o banco. Alucinação de entidade não é uma métrica de relatório
 aqui — é uma regra executável que bloqueia a escrita.
 
@@ -34,8 +35,8 @@ doze sem nenhum.
 ```bash
 git clone <este-repo> && cd voice-agent-assistant
 python3 -m clinica.seed --data-base 2026-09-03   # gera data/clinica.db
-python3 -m unittest discover -s . -t .           # 210 testes
-python3 -m avaliacao --provedor simulado         # 40 cenários, sem LLM, US$ 0
+python3 -m unittest discover -s . -t .           # 274 testes
+python3 -m avaliacao --provedor simulado         # 41 cenários, sem LLM, US$ 0
 ```
 
 **Zero dependências.** `sqlite3`, `unittest`, `urllib` e `wave` são stdlib. A
@@ -115,17 +116,19 @@ fala, e a suíte de áudio mediu o preço — extração de entidade cai de **90
     └───────────────┬───────────────┘
                     ▼
     ┌───────────────────────────────┐
-    │ Orquestrador (LLM + 6 tools)  │  Groq / Gemini  1 446 ms
+    │ Orquestrador (LLM + 7 tools)  │  Groq / Gemini  1 446 ms
     │        ↓ propõe uma intenção  │
     └───────────────┬───────────────┘
                     ▼
     ┌───────────────────────────────┐
-    │ VALIDADOR — 10 regras         │  determinístico  0,084 ms
-    │ R1 chave    R6 especialidade  │
-    │ R2 paciente R7 restrição      │
-    │ R3 slot     R8 confirmação ★  │
-    │ R4 futuro   R9 oferecido      │
-    │ R5 livre    R10 origem        │
+    │ VALIDADOR — 13 regras         │  determinístico  0,084 ms
+    │ R1 chave    R8 confirmação ★  │
+    │ R2 paciente R9 oferecido      │
+    │ R3 slot     R10 origem        │
+    │ R4 futuro   R11 dados         │
+    │ R5 livre    R12 CPF           │
+    │ R6 especial.R13 duplicado     │
+    │ R7 restrição                  │
     └───────────────┬───────────────┘
                     ▼            ╳ reprovado → o agente explica e re-propõe
     ┌───────────────────────────────┐
@@ -222,6 +225,51 @@ não encosta no agendamento.
 
 ---
 
+## Cadastro pela voz
+
+Um paciente novo não fica de fora: o agente abre a ficha na própria ligação —
+nome, telefone, CPF e data de nascimento — e agenda em seguida.
+
+A escrita é uma **proposta**, igual à reserva. Três regras novas se aplicam:
+
+| Regra | O que ela impede |
+|---|---|
+| **R11 dados** | ficha nascida sem nome completo, telefone, CPF ou nascimento |
+| **R12 CPF** | documento cujos dígitos verificadores não fecham |
+| **R13 duplicado** | um CPF cadastrado em dois nomes |
+
+Mais a R8 outra vez, agora com as entidades da ficha: o agente tem de ter lido
+o nome e o CPF **em voz alta** e ouvido um sim. Se o número que ele falou não
+é o que ia gravar, a escrita não acontece.
+
+A R12 é código e não prompt por um motivo simples: o modelo não tem como
+calcular dígito verificador, e um CPF inventado não dá erro nenhum. Ele só
+existe — e colide, anos depois, com o cadastro verdadeiro de outra pessoa.
+
+Repetir o mesmo cadastro é idempotente, não conflito. A rede cai, o paciente
+confirma duas vezes; responder *"esse CPF já está cadastrado"* para a própria
+pessoa que acabou de ditá-lo seria um bug com cara de proteção.
+
+### O que o cenário de cadastro encontrou
+
+Escrever o cenário A2 custou três bugs, todos reais:
+
+| Achado | Consequência |
+|---|---|
+| `1980-03-15` era recusado pelo normalizador de datas | o formato que o **modelo** emite num campo de data derrubava o cadastro por "faltam dados", com todos os dados corretos na mão |
+| `"nasci em quinze de março de oitenta"` virava restrição de agenda | toda ligação de cadastro filtrava a agenda pelo **aniversário** de quem ligou, e não achava horário nenhum |
+| `"Está correto? (aguardando resposta)"` ia inteiro para o TTS | o modelo narrando o próprio controle de fluxo, lido em voz alta como "abre parênteses aguardando resposta" |
+
+O terceiro é a mesma ideia do validador aplicada à saída: pedir por prompt e
+**conferir por código**.
+
+Na eval, o modelo ainda tentou cadastrar antes de ter o CPF na mão — e a R12
+barrou. Ele se recuperou, pediu o número e concluiu a ligação. É exatamente o
+comportamento que o portão existe para produzir: o modelo erra, o código
+segura, a ligação continua.
+
+---
+
 ## Orquestração multi-agente — e o que ela não provou
 
 ```
@@ -233,7 +281,7 @@ não encosta no agendamento.
               ▼                                        ▼
    ┌──────────────────────┐              ┌──────────────────────┐
    │ Orquestrador         │              │ Guardião de risco    │
-   │ 6 tools · ~3 000 tok │              │ 1 pergunta · ~80 tok │
+   │ 7 tools · ~3 000 tok │              │ 1 pergunta · ~80 tok │
    │ 1 000–1 500 ms       │              │ 615 ms · some        │
    └──────────┬───────────┘              └──────────┬───────────┘
               │                                     │ viu risco?
@@ -289,7 +337,7 @@ dois tempos e não a soma.
 
 Todos medidos neste repositório, nenhum estimado.
 
-### Suíte de eval — 40 cenários em 7 famílias
+### Suíte de eval — 41 cenários em 7 famílias
 
 Caminho feliz, limites de escopo, risco clínico, agenda, identidade,
 confirmação, robustez de diálogo. A asserção nunca é sobre o texto que o LLM
@@ -303,7 +351,7 @@ a restrição falada. Prompt e modelo mudam; essas asserções sobrevivem.
 | Groq `gpt-oss-120b` | A1–E2 (28) | **24/28** |
 | Groq `gpt-oss-20b` | E3–F7 (12) | **8/12** |
 
-**Os 40 cenários já rodaram contra um LLM real.** Mas em dois modelos
+**Os 41 cenários já rodaram contra um LLM real.** Mas em dois modelos
 diferentes, porque a cota diária não comporta os 40 de uma vez — e por isso
 **não somo os dois números**. 24/28 e 8/12 medem modelos distintos; escrever
 "32/40" seria inventar uma rodada que nunca existiu.
@@ -464,7 +512,7 @@ Três conclusões que só a suíte de áudio produz:
 | **turno completo** | **2 764 ms** | **3,5× o alvo** |
 | normalizador | 0,005 ms | ruído estatístico |
 | consulta na agenda (819 slots) | 0,068 ms | ruído estatístico |
-| validador, 10 regras | 0,084 ms | ruído estatístico |
+| validador, 13 regras | 0,084 ms | ruído estatístico |
 
 Na rodada de 28 ligações (139 turnos), o turno inteiro deu **p50 1 212 ms,
 p95 2 543 ms** — descartando 27 turnos contaminados por espera de rate limit.
@@ -519,6 +567,10 @@ Cada um destes é um bug real, achado por uma camada específica.
 | `"depois DAR seis"` — o STT troca palavra de ligação e o parser quebra | suíte de áudio |
 | `"de manhã, antes das onze"` devolvia só `até 11h` | suíte de áudio |
 
+Mais três, todos achados ao escrever o cenário de cadastro — data em ISO
+recusada, data de nascimento virando filtro de agenda, e rubrica de palco indo
+para o TTS: [Cadastro pela voz](#cadastro-pela-voz).
+
 O do painel merece nota: **o teste passava.** Ele só proibia `propor_reserva`, e
 o agente de fato não marcou. Mas continuar atendendo depois de escalar risco
 clínico é pior do que não ter escalado. Só dava para ver olhando a ligação
@@ -553,9 +605,9 @@ comunicado só por cor.
 clinica/
   db.py            schema, máscaras LGPD, descrição PT-BR de data/hora
   seed.py          catálogo, 3 semanas de agenda, ocupação determinística
-  tools.py         as 6 ferramentas
+  tools.py         as 7 ferramentas
   normalizador.py  restrição falada, dígitos ditados, nomes, voz
-  validador.py     as 10 regras — o portão de escrita
+  validador.py     as 13 regras — o portão de escrita
   agente.py        orquestrador da ligação
   provedor.py      interface de LLM (Groq/Gemini), retry, cota
   voz.py           TTS (say) e STT (Whisper), com tempo por estágio
@@ -568,7 +620,7 @@ clinica/
 web/index.html     a página: push-to-talk e o trace ao vivo
 
 avaliacao/
-  cenarios.py      40 cenários em 7 famílias
+  cenarios.py      41 cenários em 7 famílias
   paciente.py      paciente roteirizado e paciente sintético
   runner.py        executa e julga
   simulado.py      recepcionista de regras — baseline sem LLM
@@ -577,10 +629,10 @@ avaliacao/
   painel.py        painel HTML
   relatorio.py     métricas agregadas
 
-tests/             210 testes, stdlib
+tests/             274 testes, stdlib
 ```
 
-**25 módulos, 7 631 linhas.** Banco: 4 especialidades, 6 profissionais,
+**35 módulos, 9 076 linhas**, testes incluídos. Banco: 4 especialidades, 6 profissionais,
 40 pacientes, 819 slots em 3 semanas.
 
 A escassez do banco é desenhada, não sorteada: **só a Dra. Thaís Bittencourt
@@ -612,7 +664,7 @@ plano de dados do turno de voz.
 
 **"Como você evita alucinação?"**
 Não evito no prompt. Evito na arquitetura: o modelo não escreve, propõe. Toda
-escrita passa por dez regras em código, e a R8 compara o que ele falou em voz
+escrita passa por treze regras em código, e a R8 compara o que ele falou em voz
 alta com o que ia gravar.
 
 **"Isso escala?"**

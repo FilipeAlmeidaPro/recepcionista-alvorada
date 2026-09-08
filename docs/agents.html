@@ -158,7 +158,7 @@
   <!-- orchestrator -->
   <rect class="d-modelo" x="340" y="148" width="212" height="84" rx="13"/>
   <text class="d-rot" x="356" y="176">Orchestrator</text>
-  <text class="d-sub" x="356" y="194">6 tools · 348 lines</text>
+  <text class="d-sub" x="356" y="194">7 tools · 388 lines</text>
   <text class="d-num-modelo" x="356" y="216">the only one with tools</text>
 
   <!-- normalizer -->
@@ -171,7 +171,7 @@
   <!-- validator and database -->
   <rect class="d-det" x="632" y="148" width="234" height="84" rx="13"/>
   <text class="d-rot" x="648" y="176">Validator</text>
-  <text class="d-sub" x="648" y="194">10 rules · 398 lines</text>
+  <text class="d-sub" x="648" y="194">13 rules · 515 lines</text>
   <text class="d-num-det" x="648" y="216">approves or blocks</text>
   <path class="d-eixo" marker-end="url(#a1)" d="M552,190 L628,190"/>
   <text class="d-sub" x="590" y="182" text-anchor="middle">intent</text>
@@ -185,7 +185,7 @@
   <!-- judge -->
   <rect class="d-det" x="34" y="298" width="220" height="58" rx="11"/>
   <text class="d-rot" x="50" y="322">Judge</text>
-  <text class="d-sub" x="50" y="340">40 scenarios · 232 lines</text>
+  <text class="d-sub" x="50" y="340">41 scenarios · 429 lines</text>
   <path class="d-eixo" marker-end="url(#a1)" d="M144,294 L144,258 L392,258 L392,236"/>
   <text class="d-sub" x="200" y="250">measures what happened</text>
 
@@ -238,7 +238,7 @@ risk.</figcaption>
 
   <rect class="d-modelo" x="40" y="132" width="260" height="86" rx="13"/>
   <text class="d-rot" x="58" y="158">Orchestrator</text>
-  <text class="d-sub" x="58" y="176">6 tools · ~3,000 tokens</text>
+  <text class="d-sub" x="58" y="176">7 tools · ~3,000 tokens</text>
   <text class="d-num-modelo" x="58" y="200">1,000–1,500 ms</text>
 
   <rect class="d-modelo" x="590" y="132" width="260" height="86" rx="13"/>
@@ -329,11 +329,11 @@ day's quota.</figcaption>
 <table>
   <tr><th>agent</th><th>role</th><th>engine</th><th class="n">size</th></tr>
   <tr><td class="forte">Orchestrator</td>
-      <td>runs the call, calls 6 tools, proposes writes</td>
-      <td><span class="tag modelo">LLM</span></td><td class="n">348</td></tr>
+      <td>runs the call, calls 7 tools, proposes writes</td>
+      <td><span class="tag modelo">LLM</span></td><td class="n">388</td></tr>
   <tr><td class="forte">Synthetic caller</td>
       <td>calls with a private goal and a personality; follows no script</td>
-      <td><span class="tag modelo">LLM</span></td><td class="n">98</td></tr>
+      <td><span class="tag modelo">LLM</span></td><td class="n">113</td></tr>
   <tr><td class="forte">Risk guardian</td>
       <td>one question per turn, in parallel: is there a risk signal here?</td>
       <td><span class="tag modelo">LLM</span></td><td class="n">—</td></tr>
@@ -345,13 +345,13 @@ day's quota.</figcaption>
       <td><span class="tag modelo">LLM</span></td><td class="n">—</td></tr>
   <tr><td class="forte">Supervisor</td>
       <td>coordinates the specialists; runs the guardian in parallel, preempts</td>
-      <td><span class="tag det">code</span></td><td class="n">265</td></tr>
+      <td><span class="tag det">code</span></td><td class="n">263</td></tr>
   <tr><td class="forte">Validator</td>
-      <td>10 rules between the model's proposal and the database</td>
-      <td><span class="tag det">code</span></td><td class="n">398</td></tr>
+      <td>13 rules between the model's proposal and the database</td>
+      <td><span class="tag det">code</span></td><td class="n">515</td></tr>
   <tr><td class="forte">Judge</td>
-      <td>judges 40 scenarios by what happened, not by the text</td>
-      <td><span class="tag det">code</span></td><td class="n">232</td></tr>
+      <td>judges 41 scenarios by what happened, not by the text</td>
+      <td><span class="tag det">code</span></td><td class="n">264</td></tr>
   <tr><td class="forte">Rule-based baseline</td>
       <td>receptionist with no LLM; proves the judge fails a bad agent</td>
       <td><span class="tag det">code</span></td><td class="n">149</td></tr>
@@ -359,7 +359,7 @@ day's quota.</figcaption>
 </div>
 <div class="prosa">
   <p>Two more that decide without being agents: the
-  <strong>normalizer</strong> (562 lines) turns speech into a filter, and the
+  <strong>normalizer</strong> (667 lines) turns speech into a filter, and the
   <strong>VAD</strong> (137 lines) decides when the turn ended. Neither
   invents.</p>
 </div>
@@ -391,7 +391,7 @@ day's quota.</figcaption>
 
 <div class="nota aviso">
   <p><strong>No LLM is required to run the project.</strong> With no key at
-  all: 213 tests pass, the 40 scenarios run against the rule-based baseline, and
+  all: 274 tests pass, the 41 scenarios run against the rule-based baseline, and
   the entity benchmark compares regex against the normalizer. The LLM is there
   to measure <em>the model</em>, not to make the system work.</p>
 </div>
@@ -432,6 +432,6 @@ day's quota.</figcaption>
 <div class="rodape">
   Voice Agent Assistant ·
   <a href="https://github.com/FilipeAlmeidaPro/voice-agent-assistant">github.com/FilipeAlmeidaPro/voice-agent-assistant</a>
-  · 213 tests, zero dependencies · every number measured in this repository.
+  · 274 tests, zero dependencies · every number measured in this repository.
 </div>
 </div>

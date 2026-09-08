@@ -161,12 +161,12 @@
 
     <rect class="d-caixa" x="342" y="34" width="132" height="72" rx="12"/>
     <text class="d-rot" x="358" y="60">Orchestrator</text>
-    <text class="d-sub" x="358" y="76">LLM + 6 tools</text>
+    <text class="d-sub" x="358" y="76">LLM + 7 tools</text>
     <text class="d-num" x="358" y="94">1,446 ms</text>
 
     <rect class="d-caixa-forte" x="486" y="34" width="132" height="72" rx="12"/>
     <text class="d-rot" x="502" y="60">Validator</text>
-    <text class="d-sub" x="502" y="76">10 rules</text>
+    <text class="d-sub" x="502" y="76">13 rules</text>
     <text class="d-num-forte" x="502" y="94">0.084 ms</text>
 
     <rect class="d-caixa-forte" x="630" y="34" width="132" height="72" rx="12"/>
@@ -223,7 +223,7 @@ does.</figcaption>
 </div>
 
 <figure>
-<svg viewBox="0 0 960 410" role="img" aria-label="The orchestrator does not write to the database directly: that arrow is crossed out. It emits an intent that passes ten validation rules before the tools write; when rejected, the intent goes back to the agent to re-propose.">
+<svg viewBox="0 0 960 470" role="img" aria-label="The orchestrator does not write to the database directly: that arrow is crossed out. It emits an intent that passes thirteen validation rules before the tools write; when rejected, the intent goes back to the agent to re-propose.">
   <defs>
     <marker id="s2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
             markerHeight="6" orient="auto-start-reverse">
@@ -246,13 +246,13 @@ does.</figcaption>
   <!-- the real flow -->
   <rect class="d-caixa" x="18" y="170" width="132" height="72" rx="12"/>
   <text class="d-rot" x="34" y="200">Orchestrator</text>
-  <text class="d-sub" x="34" y="218">LLM + 6 tools</text>
+  <text class="d-sub" x="34" y="218">LLM + 7 tools</text>
 
   <rect class="d-caixa" x="220" y="170" width="100" height="72" rx="12"/>
   <text class="d-rot" x="236" y="200">Intent</text>
   <text class="d-sub" x="236" y="218">proposal</text>
 
-  <rect class="d-caixa-forte" x="390" y="80" width="228" height="272" rx="14"/>
+  <rect class="d-caixa-forte" x="390" y="80" width="228" height="340" rx="14"/>
   <text class="d-rot" x="406" y="108">Validator</text>
   <text class="d-regra" x="406" y="136">R1 · idempotency key</text>
   <text class="d-regra" x="406" y="158">R2 · patient exists</text>
@@ -264,6 +264,9 @@ does.</figcaption>
   <text class="d-regra-forte" x="406" y="290">R8 · confirmation matches</text>
   <text class="d-regra" x="406" y="312">R9 · slot was offered</text>
   <text class="d-regra" x="406" y="334">R10 · reschedule origin</text>
+  <text class="d-regra" x="406" y="356">R11 · record has every field</text>
+  <text class="d-regra" x="406" y="378">R12 · ID check digits close</text>
+  <text class="d-regra" x="406" y="400">R13 · ID not already in use</text>
 
   <rect class="d-caixa" x="688" y="170" width="88" height="72" rx="12"/>
   <text class="d-rot" x="704" y="200">tools</text>
@@ -430,7 +433,7 @@ caller their slot to whoever is next in line.</figcaption>
   exists.</p>
 </div>
 
-<h3>Eval suite — 40 scenarios in 7 families</h3>
+<h3>Eval suite — 41 scenarios in 7 families</h3>
 <div class="tabela">
 <table>
   <tr><th>agent</th><th class="n">result</th></tr>
@@ -590,7 +593,7 @@ caller: And do you take Unimed?
 <div class="rodape">
   Voice Agent Assistant · code at
   <a href="https://github.com/FilipeAlmeidaPro/voice-agent-assistant">github.com/FilipeAlmeidaPro/voice-agent-assistant</a>
-  · MIT · 213 tests, zero dependencies · no real data: the 40 patients, their
+  · MIT · 274 tests, zero dependencies · no real data: the 40 patients, their
   ID numbers with valid check digits and the whole calendar come from
   <code>Random(42)</code>.
 </div>
