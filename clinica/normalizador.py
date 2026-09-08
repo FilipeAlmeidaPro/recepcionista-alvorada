@@ -33,8 +33,15 @@ _EXTENSO = {
     "dezoito": 18, "dezenove": 19, "vinte": 20, "trinta": 30, "quarenta": 40,
     "cinquenta": 50, "sessenta": 60, "setenta": 70, "oitenta": 80,
     "noventa": 90, "cem": 100, "cento": 100,
+    # Centenas e milhar: só aparecem em ano de nascimento, mas sem elas
+    # "mil novecentos e oitenta" só dava 1980 por acidente — "mil" e
+    # "novecentos" eram ignorados e sobrava o "oitenta".
+    "duzentos": 200, "trezentos": 300, "quatrocentos": 400,
+    "quinhentos": 500, "seiscentos": 600, "setecentos": 700,
+    "oitocentos": 800, "novecentos": 900, "mil": 1000,
+    "primeiro": 1,          # "primeiro de janeiro"
 }
-_COMPOSTOS = {20, 30, 40, 50, 60, 70, 80, 90, 100}
+_COMPOSTOS = {20, 30, 40, 50, 60, 70, 80, 90}
 
 # "meia" fica de fora do dicionário de propósito: em ditado de dígitos vale 6,
 # em expressão de hora vale 30 minutos. São dois modos, não um.
@@ -378,13 +385,25 @@ def _restricao_temporal(tokens, hoje: date):
 _NOMES_DIA = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
 
 
+# Falar do passado não é pedir horário. Sem isto, cada ligação de cadastro
+# entrava na agenda filtrada pela data de nascimento de quem ligou.
+MARCAS_DE_PASSADO = {"nasci", "nascida", "nascido", "nascimento", "aniversario"}
+
+
 def interpretar_restricao(texto: str, hoje: date | None = None) -> Restricao:
     """Converte a fala do paciente em filtros para `consultar_agenda`."""
     hoje = hoje or date.today()
     tokens = tokenizar(texto)
     hora_min, hora_max, ambigua, consumidos = _restricao_horaria(tokens)
     hora_min, hora_max = _completar_com_periodo(tokens, hora_min, hora_max, consumidos)
-    data_inicio, data_fim, dias = _restricao_temporal(tokens, hoje)
+    if MARCAS_DE_PASSADO & set(tokens):
+        # "nasci em quinze de março de oitenta" traz uma data que não é um
+        # pedido de agenda — e o extrator de datas empurrava esse 15 de março
+        # para o futuro, filtrando a agenda inteira pelo aniversário da pessoa.
+        # Ninguém marca consulta dizendo quando nasceu.
+        data_inicio = data_fim = dias = None
+    else:
+        data_inicio, data_fim, dias = _restricao_temporal(tokens, hoje)
 
     if hora_min and hora_max and hora_min > hora_max:
         # Não deveria acontecer — há um teste de propriedade contra isso. Se
@@ -439,6 +458,85 @@ def mesclar_restricoes(atual: Restricao, nova: Restricao) -> Restricao:
         descrever_restricao(hora_min, hora_max, dias, data_inicio, data_fim))
 
 
+IDADE_MAXIMA = 120
+
+
+def normalizar_nascimento(texto: str, hoje: date | None = None) -> str | None:
+    """Data de nascimento falada → AAAA-MM-DD, ou None se não der para ler.
+
+    Aceita o que as pessoas realmente dizem: "quinze de março de oitenta",
+    "15/03/1980", "quinze do três de mil novecentos e oitenta". Devolver None
+    é resposta legítima — é melhor o agente pedir de novo do que gravar uma
+    data inventada na ficha de alguém.
+    """
+    hoje = hoje or date.today()
+    tokens = tokenizar(texto)
+    if not tokens:
+        return None
+
+    numeros, mes_nomeado = [], None
+    i = 0
+    while i < len(tokens):
+        if tokens[i] in MESES:
+            mes_nomeado = MESES[tokens[i]]
+            i += 1
+            continue
+        valor, prox = _ler_numero(tokens, i)
+        if valor is None:
+            i += 1
+            continue
+        if valor == 0:
+            # "zero três de doze" — o zero é o zero à esquerda que a pessoa
+            # fala, não um número. Solto ele nunca é dia, mês nem ano.
+            i = prox
+            continue
+        # Ano falado vem em pedaços: "mil novecentos e oitenta" é 1000+900+80,
+        # "dois mil e cinco" é 2*1000+5. Junta na ordem em que se fala.
+        if numeros and valor == 1000 and 1 <= numeros[-1] <= 9:
+            numeros[-1] *= 1000
+        elif (numeros and numeros[-1] >= 1000 and valor < 1000
+              and numeros[-1] % 100 == 0):
+            # Só absorve enquanto o ano está incompleto: 1900 aceita o "oitenta"
+            # e vira 1980; 2005 já está fechado, então o "dez" seguinte é o dia.
+            numeros[-1] += valor
+        elif numeros and 100 <= numeros[-1] < 1000 and valor < 100:
+            numeros[-1] += valor
+        else:
+            numeros.append(valor)
+        i = prox
+
+    if mes_nomeado is not None:
+        # Por posição, nunca por valor: filtrar "o número diferente do mês"
+        # apagava o dia em "primeiro de janeiro", onde dia e mês são 1.
+        dia = ano = None
+        for n in numeros:
+            if ano is None and n > 31:
+                ano = n
+            elif dia is None and 1 <= n <= 31:
+                dia = n
+    elif len(numeros) >= 3 and numeros[0] > 31:
+        # ISO — "1980-03-15". É o formato que o modelo emite quando preenche um
+        # campo de data, e recusá-lo derrubava o cadastro por R11 com todos os
+        # dados corretos na mão.
+        ano, mes_nomeado, dia = numeros[0], numeros[1], numeros[2]
+    elif len(numeros) >= 3:
+        dia, mes_nomeado, ano = numeros[0], numeros[1], numeros[2]
+    else:
+        return None
+    if dia is None or mes_nomeado is None or ano is None:
+        return None
+
+    if ano < 100:      # "oitenta" é 1980, "cinco" é 2005 — nunca o futuro
+        ano += 2000 if ano <= hoje.year % 100 else 1900
+    try:
+        nascimento = date(int(ano), int(mes_nomeado), int(dia))
+    except ValueError:
+        return None
+    if not (hoje.replace(year=hoje.year - IDADE_MAXIMA) < nascimento < hoje):
+        return None
+    return nascimento.isoformat()
+
+
 GRUPOS = {"cpf": (3, 3, 3, 2), "telefone": (2, 5, 4)}
 
 
@@ -483,6 +581,12 @@ _MARCADOR = re.compile(r"^\s*(?:[-*•‣]|\d+[.)])\s+", re.MULTILINE)
 _ENFASE = re.compile(r"(\*\*|__|\*|_|`+)")
 _TITULO = re.compile(r"^\s*#{1,6}\s*", re.MULTILINE)
 _ESPACO = re.compile(r"[ \t]+")
+# O modelo narra o próprio controle de fluxo dentro da fala: "Está correto?
+# (aguardando resposta)". No telefone ninguém ouve parêntese — o TTS lê
+# "abre parênteses aguardando resposta" e a ligação fica sem sentido.
+_RUBRICA = re.compile(
+    r"\s*[(\[][^)\]]*\b(aguard|espera|esperando|pausa|sil[êe]ncio|"
+    r"wait|waiting|thinking|nota|obs)\w*\b[^)\]]*[)\]]", re.IGNORECASE)
 
 
 def limpar_para_voz(texto: str) -> str:
@@ -496,6 +600,7 @@ def limpar_para_voz(texto: str) -> str:
     if not texto:
         return ""
     saida = ""
+    texto = _RUBRICA.sub("", texto)
     for linha in _TITULO.sub("", _MARCADOR.sub("", texto)).splitlines():
         linha = _ESPACO.sub(" ", _ENFASE.sub("", linha)).strip()
         if not linha:

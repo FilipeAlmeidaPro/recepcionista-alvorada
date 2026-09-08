@@ -8,7 +8,7 @@ from clinica import db
 from clinica.normalizador import (Restricao, casar_especialidade, casar_nome,
                                   cpf_valido, extrair_digitos,
                                   interpretar_restricao, ler_digitos,
-                                  limpar_para_voz)
+                                  limpar_para_voz, normalizar_nascimento)
 
 HOJE = date(2026, 9, 3)   # quinta-feira
 
@@ -283,6 +283,22 @@ class TestLimparParaVoz(unittest.TestCase):
             self.assertIn(entidade, limpa)
 
 
+    def test_rubrica_de_espera_nao_e_falada(self):
+        """Visto na eval: "Está tudo correto? (aguardando resposta)". O modelo
+        narrando o próprio controle de fluxo — o TTS lê o parêntese em voz alta."""
+        self.assertEqual(limpar_para_voz("Está tudo correto? (aguardando resposta)"),
+                         "Está tudo correto?")
+
+    def test_rubrica_em_ingles_tambem_cai(self):
+        self.assertEqual(limpar_para_voz("Vou verificar. [waiting for user]"),
+                         "Vou verificar.")
+
+    def test_parentese_com_informacao_de_verdade_fica(self):
+        """A regra é contra rubrica, não contra parêntese: apagar tudo tiraria
+        conteúdo que o paciente precisa ouvir."""
+        dito = "A consulta é na sexta (dia 4 de setembro), às 9h."
+        self.assertEqual(limpar_para_voz(dito), dito)
+
 class TestNomes(unittest.TestCase):
     CADASTRO = ["Thaís Vasconcelos", "Wesley Bittencourt", "Larissa Nakamura",
                 "Kauã Figueiredo", "Heitor Cruz"]
@@ -305,3 +321,95 @@ class TestNomes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPassadoNaoEAgenda(unittest.TestCase):
+    """Achado pelo cenário de cadastro: a fala que informa a data de nascimento
+    passava pelo extrator de datas, que empurrava o 15 de março para o futuro e
+    filtrava a agenda inteira pelo aniversário de quem ligou."""
+
+    HOJE = date(2026, 9, 3)
+
+    def r(self, texto):
+        return interpretar_restricao(texto, self.HOJE)
+
+    def test_nascimento_nao_vira_data_de_consulta(self):
+        self.assertIsNone(self.r("nasci em quinze de março de oitenta").data_inicio)
+
+    def test_a_palavra_nascimento_tambem_protege(self):
+        self.assertIsNone(
+            self.r("minha data de nascimento é quinze de março de oitenta").data_inicio)
+
+    def test_a_restricao_de_hora_na_mesma_frase_sobrevive(self):
+        """Só a data cai. "Só consigo depois das seis" continua valendo."""
+        r = self.r("só consigo depois das seis, e nasci em março de oitenta")
+        self.assertEqual(r.hora_min, "18:00")
+        self.assertIsNone(r.data_inicio)
+
+    def test_data_de_consulta_de_verdade_continua_passando(self):
+        self.assertEqual(self.r("pode ser dia quinze de março").data_inicio,
+                         "2027-03-15")
+
+
+class TestNascimento(unittest.TestCase):
+    """Data de nascimento é ditada por extenso, com sotaque e sem pontuação.
+
+    Devolver None é resposta legítima e desejável: uma data inventada na ficha
+    de alguém não dá erro nenhum — só some, e reaparece anos depois."""
+
+    HOJE = date(2026, 9, 8)
+
+    def ler(self, texto):
+        return normalizar_nascimento(texto, self.HOJE)
+
+    def test_por_extenso_completo(self):
+        self.assertEqual(self.ler("quinze de março de mil novecentos e oitenta"),
+                         "1980-03-15")
+
+    def test_ano_abreviado_vira_o_seculo_certo(self):
+        self.assertEqual(self.ler("quinze de março de oitenta"), "1980-03-15")
+
+    def test_primeiro_e_dia_um_e_nao_mes_um(self):
+        """`primeiro` vale 1 nos dois campos — filtrar por valor comia o dia."""
+        self.assertEqual(self.ler("primeiro de janeiro de dois mil"), "2000-01-01")
+
+    def test_barra(self):
+        self.assertEqual(self.ler("15/03/1980"), "1980-03-15")
+
+    def test_digitos_ditados_seguidos(self):
+        self.assertEqual(self.ler("zero três de doze de setenta e sete"),
+                         "1977-12-03")
+
+    def test_mes_dito_como_numero(self):
+        self.assertEqual(self.ler("quinze do três de oitenta"), "1980-03-15")
+
+    def test_ano_de_dois_mil_nao_engole_o_dia(self):
+        """"dois mil e cinco" acumula; o dia que vem depois não faz parte."""
+        self.assertEqual(self.ler("dez de junho de dois mil e cinco"),
+                         "2005-06-10")
+
+    def test_iso_do_modelo(self):
+        """O formato que o LLM emite num campo de data. Recusá-lo derrubava o
+        cadastro por "faltam dados" com todos os dados corretos na mão."""
+        self.assertEqual(self.ler("1980-03-15"), "1980-03-15")
+
+    def test_iso_com_barra(self):
+        self.assertEqual(self.ler("1980/03/15"), "1980-03-15")
+
+    def test_iso_impossivel_continua_recusado(self):
+        self.assertIsNone(self.ler("1980-13-45"))
+
+    def test_data_impossivel_e_recusada(self):
+        self.assertIsNone(self.ler("trinta e um de fevereiro de oitenta"))
+
+    def test_futuro_e_recusado(self):
+        self.assertIsNone(self.ler("dez de junho de dois mil e trinta"))
+
+    def test_idade_implausivel_e_recusada(self):
+        self.assertIsNone(self.ler("dez de junho de mil oitocentos e vinte"))
+
+    def test_frase_sem_data_devolve_none(self):
+        self.assertIsNone(self.ler("ah, não lembro agora"))
+
+    def test_so_o_ano_nao_basta(self):
+        self.assertIsNone(self.ler("mil novecentos e oitenta"))
