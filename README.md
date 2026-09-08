@@ -1,8 +1,8 @@
 # Voice Agent Assistant
 
-Agente de voz para agendamento em clínica multidisciplinar, em português do
-Brasil. A clínica da demo — **Clínica Alvorada** — é fictícia, e os 40
-pacientes, os CPFs e a agenda inteira são gerados por `Random(42)`. Ele
+Agente de voz para agendamento em clínica multidisciplinar, **em português do
+Brasil e em inglês**. A clínica da demo — **Clínica Alvorada** — é fictícia, e
+os 40 pacientes, os CPFs e a agenda inteira são gerados por `Random(42)`. Ele
 identifica o paciente — ou abre a ficha na hora, se for a primeira ligação —,
 entende uma restrição falada, consulta a agenda real, propõe horário, confirma
 em voz alta e grava. Ou transfere para um humano, quando é o certo a fazer.
@@ -12,6 +12,8 @@ em voz alta e grava. Ou transfere para um humano, quando é o certo a fazer.
 O cenário que o projeto persegue é um só, feito a fundo:
 
 > **"Quero marcar um ortopedista, mas só consigo depois das seis."**
+>
+> **"I need an orthopedist, but I can only do after six."**
 
 ---
 
@@ -35,8 +37,8 @@ doze sem nenhum.
 ```bash
 git clone <este-repo> && cd voice-agent-assistant
 python3 -m clinica.seed --data-base 2026-09-03   # gera data/clinica.db
-python3 -m unittest discover -s . -t .           # 274 testes
-python3 -m avaliacao --provedor simulado         # 41 cenários, sem LLM, US$ 0
+python3 -m unittest discover -s . -t .           # 324 testes
+python3 -m avaliacao --provedor simulado         # 46 cenários, sem LLM, US$ 0
 ```
 
 **Zero dependências.** `sqlite3`, `unittest`, `urllib` e `wave` são stdlib. A
@@ -225,30 +227,40 @@ não encosta no agendamento.
 
 ---
 
-## Cadastro pela voz
+## Cadastro pela voz — nome e telefone
 
-Um paciente novo não fica de fora: o agente abre a ficha na própria ligação —
-nome, telefone, CPF e data de nascimento — e agenda em seguida.
+Um paciente novo não fica de fora: o agente abre a ficha na própria ligação e
+agenda em seguida. Ele pede **duas coisas**: nome completo e telefone.
 
-A escrita é uma **proposta**, igual à reserva. Três regras novas se aplicam:
+Não pede CPF. Quem liga de fora do país não tem um, e exigir documento para
+marcar consulta transforma um cadastro de dois campos numa entrevista. Se o
+paciente oferecer o CPF, ele é aceito — e conferido.
+
+A escrita é uma **proposta**, igual à reserva:
 
 | Regra | O que ela impede |
 |---|---|
-| **R11 dados** | ficha nascida sem nome completo, telefone, CPF ou nascimento |
-| **R12 CPF** | documento cujos dígitos verificadores não fecham |
-| **R13 duplicado** | um CPF cadastrado em dois nomes |
+| **R11 dados** | ficha nascida sem nome completo ou sem telefone |
+| **R12 CPF** | documento cujos dígitos verificadores não fecham — só dispara quando há CPF |
+| **R13 duplicado** | o mesmo telefone (ou o mesmo CPF) cadastrado em dois nomes |
 
-Mais a R8 outra vez, agora com as entidades da ficha: o agente tem de ter lido
-o nome e o CPF **em voz alta** e ouvido um sim. Se o número que ele falou não
-é o que ia gravar, a escrita não acontece.
+Mais a R8 outra vez, com as entidades da ficha: o agente tem de ter lido o nome
+e o telefone **em voz alta** e ouvido um sim. Sem CPF, **o telefone é a
+identidade**: se ele leu um número e gravou outro, a pessoa fica com um
+cadastro que nunca mais vai encontrar — e nada nisso dá erro.
 
-A R12 é código e não prompt por um motivo simples: o modelo não tem como
-calcular dígito verificador, e um CPF inventado não dá erro nenhum. Ele só
-existe — e colide, anos depois, com o cadastro verdadeiro de outra pessoa.
+A R12 é código e não prompt por um motivo simples: o modelo não calcula dígito
+verificador. Um CPF inventado não dá erro nenhum; ele só existe, e colide anos
+depois com o cadastro verdadeiro de outra pessoa.
 
 Repetir o mesmo cadastro é idempotente, não conflito. A rede cai, o paciente
-confirma duas vezes; responder *"esse CPF já está cadastrado"* para a própria
-pessoa que acabou de ditá-lo seria um bug com cara de proteção.
+confirma duas vezes; responder *"esse telefone já está cadastrado"* para quem
+acabou de se cadastrar seria um bug com cara de proteção.
+
+No banco, `cpf` e `nascimento` viraram opcionais — e o `UNIQUE` do CPF
+continua valendo, porque no SQLite `NULL` não colide com `NULL`. Bancos
+semeados antes disso são migrados por reconstrução da tabela: `CREATE TABLE IF
+NOT EXISTS` não altera nada, e o SQLite não solta um `NOT NULL` com `ALTER`.
 
 ### O que o cenário de cadastro encontrou
 
@@ -263,10 +275,81 @@ Escrever o cenário A2 custou três bugs, todos reais:
 O terceiro é a mesma ideia do validador aplicada à saída: pedir por prompt e
 **conferir por código**.
 
-Na eval, o modelo ainda tentou cadastrar antes de ter o CPF na mão — e a R12
-barrou. Ele se recuperou, pediu o número e concluiu a ligação. É exatamente o
-comportamento que o portão existe para produzir: o modelo erra, o código
-segura, a ligação continua.
+Na eval, o modelo ainda tentou cadastrar antes de ter os dados na mão — e o
+portão barrou. Ele se recuperou, pediu de novo e concluiu a ligação. É
+exatamente o comportamento que o portão existe para produzir: o modelo erra, o
+código segura, a ligação continua.
+
+---
+
+## Atendimento em inglês
+
+O agente atende nas duas línguas. O que tornou isso barato não foi um
+normalizador maior — foi separar **o algoritmo** das **palavras**. O parser de
+restrição é um só (707 linhas); o que muda com o idioma é uma tabela de 338, em
+`clinica/idioma.py`.
+
+```
+"depois das seis"          →  18:00, ambíguo
+"after six"                →  18:00, ambíguo      (mesma heurística de clínica)
+"only after 6pm"           →  18:00              (o "pm" desfaz a ambiguidade)
+"de manhã, antes das onze" →  06:00 – 11:00
+"in the morning, before eleven" → 06:00 – 11:00
+"seis e meia"              →  18:30
+"half past six"            →  18:30              (a ordem inverte)
+```
+
+A detecção é determinística — palavras funcionais, não LLM — e **empata para o
+idioma corrente**: `"ok"` existe nas duas línguas, e trocar de idioma porque o
+paciente respondeu uma monossílaba é pior do que ter começado na língua errada.
+
+### Por que o idioma desce até o validador
+
+Essa é a parte que não era óbvia. A R8 confere o que o agente falou em voz
+alta. Medido:
+
+```
+"Friday, September 4, at 8 am"  lido com as tabelas em português
+  → {hora: None, dia_semana: None, dia_mes: None, mes: None}
+```
+
+Nenhuma entidade. A regra então falha **fechada**: reprova toda ligação em
+inglês por *"o agente não disse o horário em voz alta"*, inclusive quando ele
+disse. Não é um buraco de segurança — é a impossibilidade de atender no idioma.
+Por isso `Idioma` atravessa o normalizador e o validador, e não só o prompt.
+
+No consentimento a colisão é pior: **`"no"` é negação em inglês e preposição em
+português.** Uma lista só, somando as duas línguas, leria *"pode ser no dia
+quinze"* como recusa.
+
+A voz também troca: `say` com a Luciana lendo inglês produz inglês com fonética
+portuguesa. Em inglês a demo usa Samantha, e o Whisper recebe `language=en`.
+
+### O que ainda não foi medido
+
+O prompt do sistema **não** é traduzido — as regras de operação são as mesmas, e
+duas versões divergem na primeira correção feita só de um lado. Entra uma
+diretriz de idioma e as palavras que o agente fala. **Essa decisão não foi
+comparada com a alternativa**, porque a cota diária dos dois provedores gratuitos
+acabou antes.
+
+O que foi medido, e vale exatamente o que diz:
+
+| Rodada | Resultado |
+|---|---|
+| Groq `gpt-oss-120b`, 4 cenários em inglês, **antes** da correção de especialidade | **1/4** — só o de risco clínico passou |
+| Gemini `3.5-flash`, cenário G2 (paciente novo em inglês), **depois** da correção | **passou** |
+
+O bug que a primeira rodada encontrou está corrigido e coberto por teste:
+**`"orthopedist"` não casava com `Ortopedia` nem por prefixo** — "ortho" contra
+"ortop". As outras três especialidades passavam por acidente ("derma", "cardi",
+"neuro" coincidem nas duas línguas), o que é pior do que falhar: a regra
+*parecia* funcionar. Agora cada idioma tem uma tabela de apelidos explícita.
+
+O que a rodada da Groq também mostrou, e não está resolvido: o modelo entrou
+num laço relendo o telefone de volta, e numa ligação afirmou ter marcado sem ter
+marcado — o prompt proíbe isso explicitamente. Não sei ainda se o prompt em
+português numa ligação em inglês contribui; é a medição que falta.
 
 ---
 
@@ -337,24 +420,34 @@ dois tempos e não a soma.
 
 Todos medidos neste repositório, nenhum estimado.
 
-### Suíte de eval — 41 cenários em 7 famílias
+### Suíte de eval — 46 cenários em 8 famílias
 
 Caminho feliz, limites de escopo, risco clínico, agenda, identidade,
-confirmação, robustez de diálogo. A asserção nunca é sobre o texto que o LLM
-produziu — é sobre o que aconteceu: agendou, transferiu, com que motivo, quais
-ferramentas usou, o que o validador bloqueou, e se o que ficou gravado respeita
-a restrição falada. Prompt e modelo mudam; essas asserções sobrevivem.
+confirmação, robustez de diálogo, **atendimento em inglês**. A asserção nunca é
+sobre o texto que o LLM produziu — é sobre o que aconteceu: agendou,
+transferiu, com que motivo, quais ferramentas usou, o que o validador bloqueou,
+e se o que ficou gravado respeita a restrição falada. Prompt e modelo mudam;
+essas asserções sobrevivem.
 
 | Agente | Cenários | Resultado |
 |---|---|---|
-| baseline de regras, sem LLM | 40 | **37/40** |
+| baseline de regras, sem LLM | 46 | **36/46** |
 | Groq `gpt-oss-120b` | A1–E2 (28) | **24/28** |
 | Groq `gpt-oss-20b` | E3–F7 (12) | **8/12** |
+| Groq `gpt-oss-120b` | G1–G4, inglês | **1/4** |
+| Gemini `3.5-flash` | G2, depois da correção | **passou** |
 
-**Os 41 cenários já rodaram contra um LLM real.** Mas em dois modelos
-diferentes, porque a cota diária não comporta os 40 de uma vez — e por isso
-**não somo os dois números**. 24/28 e 8/12 medem modelos distintos; escrever
-"32/40" seria inventar uma rodada que nunca existiu.
+**Cada linha é uma rodada separada, e elas não se somam.** A cota diária
+gratuita não comporta os 46 cenários de uma vez, então modelos diferentes
+cobriram faixas diferentes. Escrever "32/40" a partir de 24/28 e 8/12 seria
+inventar uma rodada que nunca existiu.
+
+As duas últimas linhas são a família nova e merecem a ressalva completa: a
+rodada 1/4 aconteceu **antes** da correção do apelido de especialidade que ela
+mesma encontrou, e a única rodada depois da correção cobriu **um** cenário, em
+outro modelo. A família em inglês ainda não foi medida inteira num estado
+estável. O baseline de regras faz 0/4 nela — ele não fala inglês, e é assim que
+deve ser.
 
 Além da taxa de conclusão, a suíte reporta a **taxa de recuperação**: dos
 16 cenários em que algo dá errado no meio — o paciente hesita, se corrige, se
@@ -606,6 +699,7 @@ clinica/
   db.py            schema, máscaras LGPD, descrição PT-BR de data/hora
   seed.py          catálogo, 3 semanas de agenda, ocupação determinística
   tools.py         as 7 ferramentas
+  idioma.py        tabelas de pt-BR e inglês; detecção determinística
   normalizador.py  restrição falada, dígitos ditados, nomes, voz
   validador.py     as 13 regras — o portão de escrita
   agente.py        orquestrador da ligação
@@ -620,7 +714,7 @@ clinica/
 web/index.html     a página: push-to-talk e o trace ao vivo
 
 avaliacao/
-  cenarios.py      41 cenários em 7 famílias
+  cenarios.py      46 cenários em 8 famílias
   paciente.py      paciente roteirizado e paciente sintético
   runner.py        executa e julga
   simulado.py      recepcionista de regras — baseline sem LLM
@@ -629,10 +723,10 @@ avaliacao/
   painel.py        painel HTML
   relatorio.py     métricas agregadas
 
-tests/             274 testes, stdlib
+tests/             324 testes, stdlib
 ```
 
-**35 módulos, 9 076 linhas**, testes incluídos. Banco: 4 especialidades, 6 profissionais,
+**37 módulos, 10 021 linhas**, testes incluídos. Banco: 4 especialidades, 6 profissionais,
 40 pacientes, 819 slots em 3 semanas.
 
 A escassez do banco é desenhada, não sorteada: **só a Dra. Thaís Bittencourt

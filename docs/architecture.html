@@ -97,6 +97,7 @@
   td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;
     font-family:var(--mono);font-size:13.5px}
   td.forte{color:var(--ink);font-weight:500}
+  .apagado{color:var(--ink-3)}
   .bom{color:var(--accent)}
   .ruim{color:var(--danger)}
 
@@ -123,11 +124,12 @@
   receptionist for a clinic. The thesis fits in one line: <strong>the model
   proposes, the code writes.</strong></p>
   <div class="chips">
-    <span class="chip"><b>213</b> tests</span>
-    <span class="chip"><b>10</b> validation rules</span>
-    <span class="chip"><b>40</b> eval scenarios</span>
+    <span class="chip"><b>324</b> tests</span>
+    <span class="chip"><b>13</b> validation rules</span>
+    <span class="chip"><b>46</b> eval scenarios</span>
     <span class="chip"><b>0</b> dependencies</span>
-    <span class="chip"><b>7,631</b> lines</span>
+    <span class="chip"><b>2</b> languages</span>
+    <span class="chip"><b>10,021</b> lines</span>
   </div>
 </header>
 
@@ -298,6 +300,48 @@ prompt. One test bypasses the tools and writes straight to the database; the
 database refuses.</figcaption>
 </figure>
 
+<h2>The seven tools</h2>
+<div class="prosa">
+  <p>The orchestrator is the only one holding tools — and none of them writes
+  to the database on its own. The three that start with <code>propor_</code>
+  ("propose") mean it literally: they assemble an <strong>intent</strong> and
+  hand it to the validator, which decides. The other four read, or hand the
+  call on.</p>
+</div>
+<div class="tabela">
+<table>
+  <tr><th>tool</th><th>what it does</th><th>writes?</th><th class="n">rules</th></tr>
+  <tr><td class="forte"><code>buscar_paciente</code></td>
+      <td>finds the record by phone or ID; returns the document masked</td>
+      <td><span class="apagado">reads</span></td><td class="n">—</td></tr>
+  <tr><td class="forte"><code>consultar_agenda</code></td>
+      <td>free slots for the specialty, already filtered by the constraint the
+          normalizer pulled out of the caller's speech</td>
+      <td><span class="apagado">reads</span></td><td class="n">—</td></tr>
+  <tr><td class="forte"><code>propor_cadastro</code></td>
+      <td>opens a record for a first-time caller — name and phone</td>
+      <td>proposes</td><td class="n">R1, R8, R11, R12, R13</td></tr>
+  <tr><td class="forte"><code>propor_reserva</code></td>
+      <td>books a slot already offered and already confirmed out loud</td>
+      <td>proposes</td><td class="n">R1–R9</td></tr>
+  <tr><td class="forte"><code>propor_reagendamento</code></td>
+      <td>moves an active booking to another slot</td>
+      <td>proposes</td><td class="n">R1–R10</td></tr>
+  <tr><td class="forte"><code>propor_cancelamento</code></td>
+      <td>cancels; demands the same verbal confirmation booking does</td>
+      <td>proposes</td><td class="n">R1, R8, R10</td></tr>
+  <tr><td class="forte"><code>transferir_para_humano</code></td>
+      <td>ends the call and hands it over, with reason and summary</td>
+      <td>records</td><td class="n">—</td></tr>
+</table>
+</div>
+<div class="nota">
+  <p>No write tool is exposed to the model. It has never heard of
+  <code>reservar_horario</code>, <code>cadastrar_paciente</code> or
+  <code>cancelar</code> — only the <code>propor_</code> versions, which go
+  through the gate. That's the whole thesis, in a naming convention.</p>
+</div>
+
 <h2>R8 — the rule that catches hallucination</h2>
 <div class="prosa">
   <p>The validator doesn't only receive structured arguments. It receives
@@ -368,6 +412,41 @@ caller their slot to whoever is next in line.</figcaption>
              └─ reply «hmm, sei lá» read as «undetermined»
 <span class="g">[WROTE]</span>    everything checks out            rules passed: 10/10</pre>
 
+<h2>Two languages, one parser</h2>
+<div class="prosa">
+  <p>The agent takes calls in Portuguese and in English. What made that fit
+  wasn't a bigger normalizer — it was separating <strong>the algorithm</strong>
+  from <strong>the words</strong>. There is one constraint parser, 707 lines;
+  what changes with the language is a 338-line table, in
+  <code>idioma.py</code>.</p>
+  <p>Detection is deterministic, from the caller's speech, and a tie keeps the
+  current language: <code>"ok"</code> exists in both, and switching language
+  because someone answered in one syllable is worse than having started in the
+  wrong one.</p>
+</div>
+<div class="nota">
+  <p><strong>What forced the language down into the validator.</strong> R8
+  checks what the agent said out loud. Measured: the correct English sentence
+  <em>“Friday, September 4, at 8 am”</em>, read with the Portuguese tables,
+  returns <code>{hora: None, dia_semana: None, dia_mes: None, mes: None}</code>
+  — no entities at all.</p>
+  <p>The rule then fails <strong>closed</strong>: it rejects every English call
+  for “the agent didn't say the time out loud”, including the calls where it
+  did. Not a security hole — an inability to serve the language at all. That is
+  why <code>Idioma</code> runs through the normalizer and the validator, and
+  not just the prompt.</p>
+</div>
+<div class="prosa">
+  <p>Consent is the worst case for merging the two: <code>"no"</code> is a
+  refusal in English and a preposition in Portuguese. A single list, summing
+  both languages, would read <em>“pode ser no dia quinze”</em> as a refusal.</p>
+  <p>The system prompt is <strong>not</strong> translated. The operating rules
+  are the same in both languages, and keeping two copies guarantees they drift
+  on the first fix applied to only one. What gets injected is a language
+  directive and the words the agent has to speak. That decision has not yet
+  been measured against the alternative.</p>
+</div>
+
 <h2>Three things the model does not control</h2>
 <div class="prosa">
   <p>The orchestrator takes three decisions out of the LLM's hands, on purpose.</p>
@@ -433,7 +512,7 @@ caller their slot to whoever is next in line.</figcaption>
   exists.</p>
 </div>
 
-<h3>Eval suite — 41 scenarios in 7 families</h3>
+<h3>Eval suite — 46 scenarios in 8 families</h3>
 <div class="tabela">
 <table>
   <tr><th>agent</th><th class="n">result</th></tr>
@@ -593,7 +672,7 @@ caller: And do you take Unimed?
 <div class="rodape">
   Voice Agent Assistant · code at
   <a href="https://github.com/FilipeAlmeidaPro/voice-agent-assistant">github.com/FilipeAlmeidaPro/voice-agent-assistant</a>
-  · MIT · 274 tests, zero dependencies · no real data: the 40 patients, their
+  · MIT · 324 tests, zero dependencies · no real data: the 40 patients, their
   ID numbers with valid check digits and the whole calendar come from
   <code>Random(42)</code>.
 </div>

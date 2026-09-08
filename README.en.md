@@ -1,11 +1,11 @@
 # Voice Agent Assistant
 
-A Brazilian-Portuguese voice agent that books appointments for a
-multi-specialty clinic. The demo clinic — **Clínica Alvorada** — is fictional,
-and the 40 patients, their ID numbers and the whole calendar come from
-`Random(42)`. It identifies the caller — or opens the record right
-there, if it's a first call — understands a spoken constraint, queries a real
-calendar, offers a slot, confirms out loud, and writes. Or escalates to a
+A voice agent that books appointments for a multi-specialty clinic,
+**in Brazilian Portuguese and in English**. The demo clinic — **Clínica
+Alvorada** — is fictional, and the 40 patients, their ID numbers and the whole
+calendar come from `Random(42)`. It identifies the caller — or opens the record
+right there, if it's a first call — understands a spoken constraint, queries a
+real calendar, offers a slot, confirms out loud, and writes. Or escalates to a
 human, when that's the right call.
 
 *[Versão em português](README.md)* · **[Architecture →](https://claude.ai/code/artifact/8e4cad9f-5b25-4a44-b1da-aa158f092b54)** · **[Who checks whom →](https://claude.ai/code/artifact/07ffe974-f74d-48f3-80cc-4c072503a993)** ([sources](docs/))
@@ -35,8 +35,8 @@ things with reliability numbers attached beats one that does twelve with none.
 ```bash
 git clone <this-repo> && cd voice-agent-assistant
 python3 -m clinica.seed --data-base 2026-09-03   # builds data/clinica.db
-python3 -m unittest discover -s . -t .           # 274 tests
-python3 -m avaliacao --provedor simulado         # 41 scenarios, no LLM, US$ 0
+python3 -m unittest discover -s . -t .           # 324 tests
+python3 -m avaliacao --provedor simulado         # 46 scenarios, no LLM, US$ 0
 ```
 
 **Zero dependencies.** `sqlite3`, `unittest`, `urllib` and `wave` are stdlib.
@@ -101,6 +101,11 @@ drops from **90% to 60%**.
 > The codebase, prompts and CLI are in Portuguese — the product is a
 > Brazilian clinic receptionist, and mixing languages in domain code makes it
 > worse, not more accessible. This document is the English entry point.
+>
+> That is about the *source*, not about the *caller*. The agent takes calls in
+> English too: see [Taking calls in English](#taking-calls-in-english). Only
+> `idioma.py` carries the English words, and it carries the Portuguese ones in
+> exactly the same shape.
 
 ---
 
@@ -233,31 +238,42 @@ never touches an appointment.
 
 ---
 
-## Registration by voice
+## Registration by voice — name and phone
 
 A first-time caller isn't turned away: the agent opens the record during the
-call itself — name, phone, ID number, date of birth — and books right after.
+call and books right after. It asks for **two things**: full name and phone.
 
-The write is a **proposal**, same as a booking. Three new rules apply:
+It does not ask for an ID number. Someone calling from abroad doesn't have one,
+and demanding a document to book an appointment turns a two-field form into an
+interview. If the caller offers the number, it's accepted — and checked.
+
+The write is a **proposal**, same as a booking:
 
 | Rule | What it prevents |
 |---|---|
-| **R11 fields** | a record born without full name, phone, ID or birth date |
-| **R12 ID digits** | a document whose check digits don't close |
-| **R13 duplicate** | one ID number registered under two names |
+| **R11 fields** | a record born without a full name or without a phone |
+| **R12 ID digits** | a document whose check digits don't close — only fires when there is one |
+| **R13 duplicate** | the same phone (or the same ID) registered under two names |
 
-Plus R8 again, now with the record's entities: the agent must have read the
-name and the ID number **out loud** and heard a yes. If the number it spoke
-isn't the number it was about to write, the write doesn't happen.
+Plus R8 again, with the record's entities: the agent must have read the name
+and the phone **out loud** and heard a yes. Without an ID number, **the phone is
+the identity**: if the agent read one number and wrote another, the caller ends
+up with a record they will never find again — and none of that raises an error.
 
 R12 is code and not prompt for a plain reason: the model can't compute a check
-digit, and a fabricated ID raises no error at all. It simply exists — and
-collides, years later, with someone's real record.
+digit. A fabricated ID raises no error at all; it simply exists, and collides
+years later with someone's real record.
 
 Repeating the same registration is idempotent, not a conflict. The network
-drops, the patient confirms twice; answering *"that ID is already registered"*
-to the very person who just dictated it would be a bug wearing the costume of
-a safeguard.
+drops, the patient confirms twice; answering *"that phone is already
+registered"* to the person who just registered would be a bug wearing the
+costume of a safeguard.
+
+In the database, `cpf` and `nascimento` became optional — and the `UNIQUE` on
+the ID still holds, because in SQLite `NULL` doesn't collide with `NULL`.
+Databases seeded before this are migrated by rebuilding the table: `CREATE
+TABLE IF NOT EXISTS` alters nothing, and SQLite can't drop a `NOT NULL` with
+`ALTER`.
 
 ### What the registration scenario found
 
@@ -272,10 +288,83 @@ Writing scenario A2 cost three bugs, all real:
 The third is the validator's idea applied to the output: ask by prompt,
 **check in code**.
 
-In the eval the model still tried to register before it had the ID number — and
-R12 blocked it. It recovered, asked for the number, and finished the call. That
-is exactly the behavior the gate exists to produce: the model errs, the code
+In the eval the model still tried to register before it had the data — and the
+gate blocked it. It recovered, asked again, and finished the call. That is
+exactly the behavior the gate exists to produce: the model errs, the code
 holds, the call goes on.
+
+---
+
+## Taking calls in English
+
+The agent works in both languages. What made that cheap wasn't a bigger
+normalizer — it was separating **the algorithm** from **the words**. There is
+one constraint parser (707 lines); what changes with the language is a 338-line
+table, in `clinica/idioma.py`.
+
+```
+"depois das seis"          →  18:00, ambiguous
+"after six"                →  18:00, ambiguous    (same clinic heuristic)
+"only after 6pm"           →  18:00               ("pm" removes the ambiguity)
+"de manhã, antes das onze" →  06:00 – 11:00
+"in the morning, before eleven" → 06:00 – 11:00
+"seis e meia"              →  18:30
+"half past six"            →  18:30               (the word order flips)
+```
+
+Detection is deterministic — function words, not an LLM — and **a tie keeps the
+current language**: `"ok"` exists in both, and switching language because the
+caller answered in one syllable is worse than having started in the wrong one.
+
+### Why the language reaches down into the validator
+
+This is the part that wasn't obvious. R8 checks what the agent said out loud.
+Measured:
+
+```
+"Friday, September 4, at 8 am"  read with the Portuguese tables
+  → {hora: None, dia_semana: None, dia_mes: None, mes: None}
+```
+
+No entities at all. The rule then fails **closed**: it rejects every English
+call for *"the agent didn't say the time out loud"*, including the calls where
+it did. Not a security hole — an inability to serve the language at all. That
+is why `Idioma` runs through the normalizer and the validator, not just the
+prompt.
+
+For consent the collision is worse: **`"no"` is a refusal in English and a
+preposition in Portuguese.** A single list, summing both languages, would read
+*"pode ser no dia quinze"* as a refusal.
+
+The voice switches too: `say` with Luciana reading English produces English
+with Portuguese phonetics. In English the demo uses Samantha, and Whisper gets
+`language=en`.
+
+### What has not been measured
+
+The system prompt is **not** translated — the operating rules are the same, and
+two copies drift on the first fix applied to only one. What gets injected is a
+language directive and the words the agent speaks. **That decision was never
+compared against the alternative**, because the daily quota on both free
+providers ran out first.
+
+What was measured, and is worth exactly what it says:
+
+| Run | Result |
+|---|---|
+| Groq `gpt-oss-120b`, 4 English scenarios, **before** the specialty fix | **1/4** — only the clinical-risk one passed |
+| Gemini `3.5-flash`, scenario G2 (new patient in English), **after** the fix | **passed** |
+
+The bug the first run found is fixed and covered by a test:
+**`"orthopedist"` didn't match `Ortopedia`, not even by prefix** — "ortho"
+against "ortop". The other three specialties passed by accident ("derma",
+"cardi", "neuro" coincide in both languages), which is worse than failing: the
+rule *looked* like it worked. Each language now carries an explicit alias table.
+
+What the Groq run also showed, and what isn't solved: the model got stuck in a
+loop re-reading the phone number back, and on one call claimed it had booked
+when it hadn't — which the prompt forbids explicitly. Whether the Portuguese
+prompt on an English call contributes is exactly the measurement still missing.
 
 ---
 
@@ -347,25 +436,33 @@ costs the larger of the two times rather than their sum.
 
 All measured in this repository, none estimated.
 
-### Eval suite — 41 scenarios in 7 families
+### Eval suite — 46 scenarios in 8 families
 
 Happy path, scope limits, clinical risk, calendar, identity, confirmation,
-dialogue robustness. The assertion is never about the text the LLM produced —
-it's about what happened: did it book, did it escalate, for what reason, which
-tools it called, what the validator blocked, and whether what got written
-respects the spoken constraint. Prompts and models change; these assertions
-survive.
+dialogue robustness, **calls in English**. The assertion is never about the
+text the LLM produced — it's about what happened: did it book, did it escalate,
+for what reason, which tools it called, what the validator blocked, and whether
+what got written respects the spoken constraint. Prompts and models change;
+these assertions survive.
 
 | Agent | Scenarios | Result |
 |---|---|---|
-| rule-based baseline, no LLM | 40 | **37/40** |
+| rule-based baseline, no LLM | 46 | **36/46** |
 | Groq `gpt-oss-120b` | A1–E2 (28) | **24/28** |
 | Groq `gpt-oss-20b` | E3–F7 (12) | **8/12** |
+| Groq `gpt-oss-120b` | G1–G4, English | **1/4** |
+| Gemini `3.5-flash` | G2, after the fix | **passed** |
 
-**All 41 scenarios have now run against a real LLM.** But across two different
-models, because the daily quota doesn't fit 40 in one go — which is why I
-**don't add the two numbers up**. 24/28 and 8/12 measure different models;
-writing "32/40" would invent a run that never happened.
+**Every row is a separate run, and they don't add up.** The free daily quota
+doesn't fit 46 scenarios in one go, so different models covered different
+ranges. Writing "32/40" out of 24/28 and 8/12 would invent a run that never
+happened.
+
+The last two rows are the new family and deserve the full caveat: the 1/4 run
+happened **before** the specialty-alias fix that it found, and the only run
+after the fix covered **one** scenario, on a different model. The English family
+has not been measured end to end in a stable state. The rule-based baseline
+scores 0/4 on it — it doesn't speak English, and that's the point.
 
 Beyond task completion, the suite reports a **recovery rate**: of the 16
 scenarios where something goes wrong mid-conversation — the caller hesitates,
@@ -632,7 +729,7 @@ clinica/
 web/index.html     the page: push-to-talk and the live trace
 
 avaliacao/
-  cenarios.py      41 scenarios in 7 families
+  cenarios.py      46 scenarios in 8 families
   paciente.py      scripted caller and synthetic caller
   runner.py        executes and judges
   simulado.py      rule-based receptionist — baseline without an LLM
@@ -641,10 +738,10 @@ avaliacao/
   painel.py        HTML panel
   relatorio.py     aggregate metrics
 
-tests/             274 tests, stdlib
+tests/             324 tests, stdlib
 ```
 
-**35 modules, 9,076 lines**, tests included. Database: 4 specialties, 6 professionals,
+**37 modules, 10,021 lines**, tests included. Database: 4 specialties, 6 professionals,
 40 patients, 819 slots across 3 weeks.
 
 Scarcity in the seed is designed, not random: **only Dra. Thaís Bittencourt

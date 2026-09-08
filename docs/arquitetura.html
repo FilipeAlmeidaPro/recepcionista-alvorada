@@ -97,6 +97,7 @@
   td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;
     font-family:var(--mono);font-size:13.5px}
   td.forte{color:var(--ink);font-weight:500}
+  .apagado{color:var(--ink-3)}
   .bom{color:var(--accent)}
   .ruim{color:var(--danger)}
 
@@ -123,11 +124,12 @@
   português do Brasil. A tese é uma frase: <strong>o modelo propõe, o código
   escreve.</strong></p>
   <div class="chips">
-    <span class="chip"><b>213</b> testes</span>
-    <span class="chip"><b>10</b> regras de validação</span>
-    <span class="chip"><b>40</b> cenários de eval</span>
+    <span class="chip"><b>324</b> testes</span>
+    <span class="chip"><b>13</b> regras de validação</span>
+    <span class="chip"><b>46</b> cenários de eval</span>
     <span class="chip"><b>0</b> dependências</span>
-    <span class="chip"><b>7 631</b> linhas</span>
+    <span class="chip"><b>2</b> idiomas</span>
+    <span class="chip"><b>10 021</b> linhas</span>
   </div>
 </header>
 
@@ -297,6 +299,48 @@ ser <b>impossível por construção</b>, não improvável por sorte do prompt. U
 teste ignora as ferramentas e escreve direto no banco; o banco recusa.</figcaption>
 </figure>
 
+<h2>As sete ferramentas</h2>
+<div class="prosa">
+  <p>O orquestrador é o único que segura ferramenta — e nenhuma delas escreve
+  no banco por conta própria. As três que começam com <code>propor_</code>
+  levam esse nome literalmente: elas montam uma <strong>intenção</strong> e a
+  entregam ao validador, que decide. As outras quatro leem, ou passam a ligação
+  adiante.</p>
+</div>
+<div class="tabela">
+<table>
+  <tr><th>ferramenta</th><th>o que faz</th><th>escreve?</th><th class="n">regras</th></tr>
+  <tr><td class="forte"><code>buscar_paciente</code></td>
+      <td>acha a ficha por telefone ou CPF; devolve o documento mascarado</td>
+      <td><span class="apagado">lê</span></td><td class="n">—</td></tr>
+  <tr><td class="forte"><code>consultar_agenda</code></td>
+      <td>horários livres da especialidade, já filtrados pela restrição que o
+          normalizador extraiu da fala</td>
+      <td><span class="apagado">lê</span></td><td class="n">—</td></tr>
+  <tr><td class="forte"><code>propor_cadastro</code></td>
+      <td>abre a ficha de quem nunca ligou — nome e telefone</td>
+      <td>propõe</td><td class="n">R1, R8, R11, R12, R13</td></tr>
+  <tr><td class="forte"><code>propor_reserva</code></td>
+      <td>marca um horário já oferecido e já confirmado em voz alta</td>
+      <td>propõe</td><td class="n">R1–R9</td></tr>
+  <tr><td class="forte"><code>propor_reagendamento</code></td>
+      <td>move um agendamento ativo para outro horário</td>
+      <td>propõe</td><td class="n">R1–R10</td></tr>
+  <tr><td class="forte"><code>propor_cancelamento</code></td>
+      <td>desmarca; a mesma confirmação verbal que marcar exige</td>
+      <td>propõe</td><td class="n">R1, R8, R10</td></tr>
+  <tr><td class="forte"><code>transferir_para_humano</code></td>
+      <td>encerra e passa adiante, com motivo e resumo</td>
+      <td>registra</td><td class="n">—</td></tr>
+</table>
+</div>
+<div class="nota">
+  <p>Nenhuma ferramenta de escrita é exposta ao modelo. Ele não conhece
+  <code>reservar_horario</code>, <code>cadastrar_paciente</code> nem
+  <code>cancelar</code> — só as versões <code>propor_</code>, que passam pelo
+  portão. É a tese inteira em uma linha de nomenclatura.</p>
+</div>
+
 <h2>R8 — a regra que pega alucinação</h2>
 <div class="prosa">
   <p>O validador não recebe só argumentos estruturados. Recebe <strong>a frase
@@ -366,6 +410,40 @@ a vaga para o próximo da fila.</figcaption>
              └─ resposta «hmm, sei lá» lida como «indefinido»
 <span class="g">[GRAVOU]</span>    tudo certo                      regras ok: 10/10</pre>
 
+<h2>Duas línguas, um parser</h2>
+<div class="prosa">
+  <p>O agente atende em português e em inglês. O que mudou para isso caber não
+  foi o normalizador — foi a separação entre <strong>o algoritmo</strong> e
+  <strong>as palavras</strong>. O parser de restrição é um só, 707 linhas; o
+  que muda de língua é uma tabela de 338, em <code>idioma.py</code>.</p>
+  <p>A detecção é determinística, pela fala do paciente, e empata para o
+  idioma corrente: <code>"ok"</code> existe nas duas línguas, e trocar de
+  idioma porque alguém respondeu uma monossílaba é pior do que ter começado
+  na língua errada.</p>
+</div>
+<div class="nota">
+  <p><strong>O que obrigou a levar o idioma até o validador.</strong> A R8
+  confere o que o agente falou em voz alta. Medido: a frase inglesa correta
+  <em>“Friday, September 4, at 8 am”</em>, lida com as tabelas em português,
+  devolve <code>{hora: None, dia_semana: None, dia_mes: None, mes: None}</code>
+  — nenhuma entidade.</p>
+  <p>A regra então falha <strong>fechada</strong>: reprova toda ligação em
+  inglês por “o agente não disse o horário em voz alta”, inclusive quando ele
+  disse. Não é um buraco de segurança — é a impossibilidade de atender no
+  idioma. Por isso <code>Idioma</code> atravessa normalizador e validador, e
+  não só o prompt.</p>
+</div>
+<div class="prosa">
+  <p>O consentimento é o pior caso da mistura: <code>"no"</code> é negação em
+  inglês e preposição em português. Uma lista só, somando as duas línguas,
+  leria <em>“pode ser no dia quinze”</em> como recusa.</p>
+  <p>O prompt do sistema <strong>não</strong> é traduzido. As regras de
+  operação são as mesmas nos dois idiomas, e manter duas versões garante que
+  divirjam na primeira correção feita só de um lado. O que entra é uma
+  diretriz de idioma e as palavras que o agente precisa falar. Essa decisão
+  ainda não foi medida contra a alternativa.</p>
+</div>
+
 <h2>Três coisas que o modelo não controla</h2>
 <div class="prosa">
   <p>O orquestrador tira três decisões das mãos do LLM, de propósito.</p>
@@ -430,7 +508,7 @@ a vaga para o próximo da fila.</figcaption>
   não é. É exatamente por isso que a confirmação dígito-a-dígito existe.</p>
 </div>
 
-<h3>Suíte de eval — 41 cenários em 7 famílias</h3>
+<h3>Suíte de eval — 46 cenários em 8 famílias</h3>
 <div class="tabela">
 <table>
   <tr><th>agente</th><th class="n">resultado</th></tr>
@@ -588,7 +666,7 @@ paciente: E vocês aceitam Unimed?
 <div class="rodape">
   Voice Agent Assistant · código em
   <a href="https://github.com/FilipeAlmeidaPro/voice-agent-assistant">github.com/FilipeAlmeidaPro/voice-agent-assistant</a>
-  · MIT · 274 testes, zero dependências · nenhum dado real: os 40 pacientes, os CPFs com dígito verificador
+  · MIT · 324 testes, zero dependências · nenhum dado real: os 40 pacientes, os CPFs com dígito verificador
   válido e a agenda inteira são gerados por <code>Random(42)</code>.
 </div>
 </div>
