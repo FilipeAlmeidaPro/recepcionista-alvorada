@@ -240,7 +240,7 @@ class TestCatalogo(unittest.TestCase):
     def test_ids_e_familias_consistentes(self):
         ids = [c.id for c in CENARIOS]
         self.assertEqual(len(set(ids)), len(ids))
-        self.assertEqual(len(CENARIOS), 40)
+        self.assertEqual(len(CENARIOS), 41)
 
 
 if __name__ == "__main__":

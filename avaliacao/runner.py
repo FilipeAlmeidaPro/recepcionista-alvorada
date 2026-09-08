@@ -18,6 +18,7 @@ from avaliacao.cenarios import Cenario, Expectativa
 from avaliacao.paciente import (PacienteRoteirizado, PacienteSintetico, ditar,
                                 ditar_com_correcao)
 from clinica import db, tools
+from clinica.normalizador import cpf_valido
 from clinica.agente import Agente
 from clinica.seed import semear
 from clinica.provedor import CotaDiariaEsgotada
@@ -25,6 +26,28 @@ from clinica.validador import _fora_da_restricao
 
 DATA_BASE = date(2026, 9, 3)
 AGORA = datetime(2026, 9, 3, 19, 0)      # ligação fora do horário comercial
+
+
+def _cpf_inedito(conn) -> str:
+    """Um CPF que fecha os dígitos e que ainda não está no banco.
+
+    O cenário de cadastro precisa de um documento que o validador aceite e que
+    não colida com a fixture — inventar um à mão dava R12 ou R13 e media o
+    cenário errado."""
+    for base in range(348_921_570, 348_922_000):
+        cpf = _com_digitos(str(base))
+        if cpf_valido(cpf) and not conn.execute(
+                "SELECT 1 FROM pacientes WHERE cpf = ?", (cpf,)).fetchone():
+            return cpf
+    raise RuntimeError("nenhum CPF inédito na faixa")
+
+
+def _com_digitos(nove: str) -> str:
+    for _ in range(2):
+        peso = len(nove) + 1
+        soma = sum(int(d) * (peso - i) for i, d in enumerate(nove))
+        nove += str(0 if soma % 11 < 2 else 11 - soma % 11)
+    return nove
 
 
 def _contexto(conn) -> dict:
@@ -40,6 +63,9 @@ def _contexto(conn) -> dict:
         "telefone2_falado": ditar(tel2),
         "cpf": p1["cpf"], "cpf_falado": ditar(p1["cpf"]),
         "cpf_falado_com_erro": ditar_com_correcao(p1["cpf"]),
+        "cpf_novo_falado": ditar(_cpf_inedito(conn)),
+        "nome_novo": "Beatriz Camargo Nogueira",
+        "telefone_novo_falado": ditar("11961230000"),
         "_paciente_id": p1["id"], "_paciente2_id": p2["id"],
     }
 

@@ -1,4 +1,4 @@
-"""Catálogo de cenários. 40 em texto — lógica, regra de negócio e recuperação.
+"""Catálogo de cenários. 41 em texto — lógica, regra de negócio e recuperação.
 
 Divisão de custo e propósito, como no plano: estes 40 rodam sem STT e sem TTS,
 em segundos, e cabem no CI. Os 6–8 de áudio da Fase 6 cobrem só o que existe
@@ -102,12 +102,16 @@ CENARIOS: list[Cenario] = [
                    ferramentas_obrigatorias=("buscar_paciente", "consultar_agenda",
                                              "propor_reserva"))),
 
-    _c("A2", "feliz", "Paciente sem cadastro",
-       "não inventar cadastro nem agendar sem paciente",
+    _c("A2", "feliz", "Primeira ligação: cadastra e marca",
+       "abrir ficha pela voz e agendar em seguida, na mesma ligação",
        ["Oi, queria marcar um dermatologista.",
-        "Meu telefone é 11 9 1234-5678",
-        "É, é a primeira vez que ligo aí."],
-       Expectativa(agendou=False, ferramentas_proibidas=("propor_reserva",))),
+        "É a primeira vez que ligo aí, não tenho cadastro não.",
+        "{nome_novo}, meu telefone é {telefone_novo_falado}",
+        "Meu CPF é {cpf_novo_falado}, nasci em quinze de março de oitenta.",
+        "Isso, tudo certo. Pode marcar."],
+       Expectativa(agendou=True,
+                   ferramentas_obrigatorias=("propor_cadastro", "propor_reserva")),
+       objetivo="marcar dermatologia sendo paciente novo, sem cadastro na clínica"),
 
     _c("A3", "feliz", "Identificação por CPF",
        "buscar_paciente pelo documento em vez do telefone",
@@ -140,6 +144,16 @@ CENARIOS: list[Cenario] = [
        Expectativa(agendou=True)),
 
     # --- B. limites e recusas ---------------------------------------------
+    _c("A7", "feliz", "Sem cadastro e sem querer dar os dados",
+       "não inventar ficha nem agendar sem paciente — o guarda antigo do A2",
+       ["Oi, queria marcar um dermatologista.",
+        "Não tenho cadastro, é a primeira vez.",
+        "Ah, prefiro não passar meus dados agora não.",
+        "Não, deixa. Depois eu ligo de novo."],
+       Expectativa(agendou=False,
+                   ferramentas_proibidas=("propor_reserva", "propor_cadastro")),
+       objetivo="marcar dermatologia, mas recusar informar CPF e data de nascimento"),
+
     _c("B1", "limite", "Especialidade que a clínica não tem",
        "recusa graciosa com alternativa verdadeira",
        ["Boa tarde, vocês têm neurologista?",
@@ -398,7 +412,7 @@ CENARIOS: list[Cenario] = [
 
 # Cenário que deve terminar sem agendamento não ganha fala de continuação:
 # o roteiro acaba e a ligação acaba junto.
-SEM_CONTINUACAO = {"A2", "B1", "B4", "B5", "B6", "B7", "C1", "C6"}
+SEM_CONTINUACAO = {"A7", "B1", "B4", "B5", "B6", "B7", "C1", "C6"}
 
 # Cenários em que algo dá errado no meio da conversa — o paciente hesita, se
 # corrige, se cala, interrompe, muda de ideia ou sai do assunto. A taxa de

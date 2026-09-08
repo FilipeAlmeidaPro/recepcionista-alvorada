@@ -4,7 +4,7 @@ Existe por dois motivos:
 
 1. **Provar que a suíte de eval funciona antes de gastar um token.** Se o juiz
    não reprova um agente que alucina, ele não vale nada quando o LLM alucinar.
-2. **Baseline.** Uma recepcionista burra de 150 linhas passa X dos 40 cenários.
+2. **Baseline.** Uma recepcionista burra de 150 linhas passa X dos 41 cenários.
    O LLM tem que bater isso — senão a complexidade não se pagou.
 
 Ela usa o mesmo normalizador e o mesmo validador do agente de verdade. O que
