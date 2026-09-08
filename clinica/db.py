@@ -38,7 +38,9 @@ CREATE TABLE IF NOT EXISTS pacientes (
     nome        TEXT NOT NULL,
     cpf         TEXT NOT NULL UNIQUE,   -- 11 dígitos, sem máscara
     telefone    TEXT NOT NULL,          -- 55DDNNNNNNNNN, sem símbolos
-    nascimento  TEXT NOT NULL           -- YYYY-MM-DD
+    nascimento  TEXT NOT NULL,          -- YYYY-MM-DD
+    criado_em   TEXT,                   -- NULL nos semeados; data no cadastro por voz
+    origem      TEXT                    -- 'seed' | 'voz'
 );
 CREATE INDEX IF NOT EXISTS idx_pacientes_telefone ON pacientes(telefone);
 
@@ -111,8 +113,19 @@ def conectar(caminho: Path | str | None = None) -> sqlite3.Connection:
     return conn
 
 
+# Coluna nova em tabela que já existe não entra por CREATE TABLE IF NOT EXISTS.
+# Banco semeado antes do cadastro por voz ficaria sem `criado_em` e a inserção
+# quebraria em silêncio — na produção de alguém, não aqui.
+MIGRACOES = {"pacientes": {"criado_em": "TEXT", "origem": "TEXT"}}
+
+
 def criar_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    for tabela, colunas in MIGRACOES.items():
+        existentes = {r["name"] for r in conn.execute(f"PRAGMA table_info({tabela})")}
+        for coluna, tipo in colunas.items():
+            if coluna not in existentes:
+                conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo}")
 
 
 # --- helpers -----------------------------------------------------------------

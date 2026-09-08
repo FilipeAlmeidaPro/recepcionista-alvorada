@@ -242,3 +242,64 @@ class TestTransferirParaHumano(BaseClinica):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCadastrarPaciente(BaseClinica):
+    """A escrita que cria uma pessoa. Errar aqui não gera um horário errado —
+    gera um paciente fantasma que colide com o cadastro real de alguém."""
+
+    DADOS = dict(nome="Joana Ribeiro Alves", telefone="11987650000",
+                 cpf="111.444.777-35", nascimento="1980-03-15")
+
+    def cadastrar(self, chave="lig-1", **muda):
+        return tools.cadastrar_paciente(self.conn, **{**self.DADOS, **muda},
+                                        idempotency_key=chave, agora=AGORA)
+
+    def test_cria_a_ficha(self):
+        r = self.cadastrar()
+        self.assertTrue(r["ok"])
+        self.assertFalse(r["idempotente"])
+        self.assertEqual(r["paciente"]["nome"], "Joana Ribeiro Alves")
+
+    def test_guarda_so_digitos(self):
+        """O CPF chega pontuado do normalizador e é comparado sem pontuação."""
+        self.cadastrar()
+        self.assertEqual(
+            self.conn.execute("SELECT cpf FROM pacientes WHERE nome=?",
+                              ("Joana Ribeiro Alves",)).fetchone()[0], "11144477735")
+
+    def test_a_ficha_nova_e_encontravel_pelo_telefone(self):
+        """Sem isto o cadastro não serve para nada: o próximo passo da ligação
+        é buscar o paciente para agendar."""
+        self.cadastrar()
+        r = tools.buscar_paciente(self.conn, telefone="11987650000")
+        self.assertEqual(r["paciente"]["nome"], "Joana Ribeiro Alves")
+
+    def test_idempotente_na_repeticao(self):
+        a = self.cadastrar()
+        b = self.cadastrar(chave="lig-2")
+        self.assertTrue(b["idempotente"])
+        self.assertEqual(a["paciente"]["id"], b["paciente"]["id"])
+
+    def test_repetir_nao_duplica_a_pessoa(self):
+        self.cadastrar(); self.cadastrar(chave="lig-2"); self.cadastrar(chave="lig-3")
+        self.assertEqual(self.conn.execute(
+            "SELECT count(*) FROM pacientes WHERE cpf='11144477735'").fetchone()[0], 1)
+
+    def test_sem_chave_nao_grava(self):
+        r = self.cadastrar(chave="")
+        self.assertFalse(r["ok"])
+        self.assertEqual(r["erro"], "chave_ausente")
+
+    def test_o_cpf_devolvido_ja_vem_mascarado(self):
+        """LGPD na saída da tool: o modelo nunca vê o documento inteiro."""
+        r = self.cadastrar()
+        self.assertNotIn("11144477735", str(r))
+        self.assertIn("*", r["paciente"]["cpf_mascarado"])
+
+    def test_registra_origem_e_data(self):
+        self.cadastrar()
+        linha = self.conn.execute(
+            "SELECT origem, criado_em FROM pacientes WHERE cpf='11144477735'").fetchone()
+        self.assertEqual(linha["origem"], "voz")
+        self.assertTrue(linha["criado_em"])

@@ -52,6 +52,13 @@ intenso, dormência súbita de um lado do corpo ou fala embolada, pare de
 agendar imediatamente e chame transferir_para_humano com motivo
 "risco_clinico". Não faça triagem, não pergunte detalhes, não ofereça horário.
 
+SEM CADASTRO
+Se buscar_paciente não encontrar ninguém, ofereça fazer o cadastro. Peça, uma
+coisa por vez: nome completo, CPF, data de nascimento. O telefone você já tem.
+Leia o nome e o CPF de volta em voz alta, dígito por dígito, e espere o
+paciente confirmar antes de chamar propor_cadastro. Um dígito errado aqui cria
+uma ficha que vai colidir com a de outra pessoa mais tarde.
+
 AGENDA
 Só ofereça horários que vieram de consultar_agenda, exatamente como vieram.
 Nunca invente, arredonde ou "aproxime" um horário. Se a ferramenta devolver
@@ -91,6 +98,18 @@ FERRAMENTAS = [
             "ignorar_restricao": {"type": ["boolean", "null"],
                                   "description": "true para ver opções fora do que o paciente pediu"}},
             "required": ["especialidade"]}}},
+    {"type": "function", "function": {
+        "name": "propor_cadastro",
+        "description": ("Cria a ficha de um paciente que ainda não tem cadastro. "
+                        "Só depois de ler nome e CPF de volta em voz alta e o "
+                        "paciente confirmar. Passa por validação antes de gravar."),
+        "parameters": {"type": "object", "properties": {
+            "nome": {"type": "string", "description": "nome completo, como falado"},
+            "telefone": {"type": "string", "description": "com DDD, como falado"},
+            "cpf": {"type": "string", "description": "como falado"},
+            "nascimento": {"type": "string",
+                           "description": "data de nascimento, como falada"}},
+            "required": ["nome", "telefone", "cpf", "nascimento"]}}},
     {"type": "function", "function": {
         "name": "propor_reserva",
         "description": ("Propõe marcar um horário já oferecido e já confirmado em voz "
@@ -256,6 +275,19 @@ class Agente:
             r["confirme_a_restricao"] = (
                 f"Entendi «{self.restricao.interpretacao}» — confirme isso em voz "
                 f"alta com o paciente antes de marcar.")
+        return r
+
+    def _t_propor_cadastro(self, args, fala_paciente: str) -> dict:
+        intencao = Intencao(
+            slot_id=0, paciente_id=0,
+            idempotency_key=f"{self.ligacao_id}:cadastro",
+            confirmacao=ConfirmacaoVerbal(self.ultima_fala_agente, fala_paciente),
+            cadastro={k: args.get(k, "") for k in
+                      ("nome", "telefone", "cpf", "nascimento")})
+        r = validador.executar_cadastro(self.conn, intencao, agora=self.agora)
+        if r.get("ok"):
+            # Cadastrou: a ligação passa a ter paciente, e o pedido segue.
+            self.paciente_id = r["paciente"]["id"]
         return r
 
     def _t_propor_reserva(self, args, fala_paciente: str) -> dict:

@@ -311,7 +311,43 @@ def reagendar(conn, *, agendamento_id: int, novo_slot_id: int, idempotency_key: 
             **_agendamento_publico(conn, novo_id)}
 
 
-# --- 5. cancelar -------------------------------------------------------------
+# --- 5. cadastrar_paciente ---------------------------------------------------
+
+def cadastrar_paciente(conn, *, nome: str, telefone: str, cpf: str,
+                       nascimento: str, idempotency_key: str,
+                       agora: datetime | None = None) -> dict:
+    """Cria a ficha. É a escrita que cria uma pessoa que não existia.
+
+    Errar aqui é pior que errar um horário: um CPF trocado não gera um
+    agendamento errado, gera **um paciente fantasma** que vai colidir com o
+    cadastro verdadeiro de alguém mais tarde. Por isso a unicidade do CPF é do
+    banco, não desta função — mesma escolha do double-booking.
+    """
+    if not idempotency_key:
+        return _falha("chave_ausente", "Cadastro sem chave de idempotência foi recusado.")
+
+    doc, tel = db.so_digitos(cpf), db.so_digitos(telefone)
+    ja = conn.execute("SELECT * FROM pacientes WHERE cpf = ?", (doc,)).fetchone()
+    if ja:
+        return {"ok": True, "idempotente": True, "paciente": _paciente_publico(ja),
+                "mensagem": "Esse cadastro já existe."}
+
+    momento = _agora(agora)
+    try:
+        cur = conn.execute(
+            "INSERT INTO pacientes (nome, cpf, telefone, nascimento, criado_em, "
+            "origem) VALUES (?,?,?,?,?,'voz')",
+            (nome.strip(), doc, tel, nascimento, momento.strftime(db.FORMATO)))
+    except sqlite3.IntegrityError:
+        return _falha("cpf_duplicado", "Esse CPF já está cadastrado.")
+
+    linha = conn.execute("SELECT * FROM pacientes WHERE id = ?",
+                         (cur.lastrowid,)).fetchone()
+    return {"ok": True, "idempotente": False, "paciente": _paciente_publico(linha),
+            "mensagem": f"Cadastro criado para {linha['nome']}."}
+
+
+# --- 6. cancelar -------------------------------------------------------------
 
 def cancelar(conn, *, agendamento_id: int, idempotency_key: str,
              motivo: str | None = None, agora: datetime | None = None) -> dict:
@@ -355,7 +391,7 @@ def cancelar(conn, *, agendamento_id: int, idempotency_key: str,
             "mensagem": "Consulta cancelada e horário liberado."}
 
 
-# --- 6. transferir_para_humano ----------------------------------------------
+# --- 7. transferir_para_humano ----------------------------------------------
 
 def transferir_para_humano(conn, *, motivo: str, resumo: str,
                            paciente_id: int | None = None, telefone: str | None = None,

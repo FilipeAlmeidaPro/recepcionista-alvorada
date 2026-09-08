@@ -13,6 +13,12 @@ e este módulo confere, em código, regra por regra:
   R8 confirmacao    — o agente repetiu o slot certo e ouviu um "sim"?
   R9 oferecido      — o slot chegou a ser oferecido ao paciente?
 
+No cadastro de paciente valem outras três, pelo mesmo motivo:
+
+  R11 dados         — nome, telefone, CPF e nascimento estão completos?
+  R12 cpf           — os dígitos verificadores fecham?
+  R13 duplicado     — esse CPF ou telefone já está na base?
+
 A R8 é a que sustenta a apresentação. O validador não recebe só os argumentos
 estruturados: recebe **a frase que o agente falou em voz alta**. Se o agente
 consultou terça e confirmou "quinta", as entidades divergem e a escrita é
@@ -31,7 +37,8 @@ from datetime import datetime
 from clinica import db, tools
 from clinica.normalizador import (DIAS_SEMANA, MESES, Restricao, _ler_hora,
                                   _ler_numero, _restricao_horaria, casar_nome,
-                                  tokenizar)
+                                  cpf_valido, extrair_digitos,
+                                  normalizar_nascimento, tokenizar)
 
 _AFIRMATIVOS = {"sim", "isso", "confirmo", "confirma", "confirmado", "perfeito",
                 "otimo", "beleza", "fechado", "exato", "exatamente", "uhum",
@@ -64,6 +71,7 @@ class Intencao:
     confirmacao: ConfirmacaoVerbal | None = None
     agendamento_id: int | None = None      # só em reagendamento
     slots_oferecidos: tuple[int, ...] | None = None
+    cadastro: dict | None = None           # só em cadastro de paciente
 
 
 @dataclass(frozen=True)
@@ -311,6 +319,115 @@ def executar_reserva(conn, intencao: Intencao, *, agora: datetime | None = None,
         idempotency_key=intencao.idempotency_key, motivo=motivo, agora=agora)
     resultado["veredito"] = veredito.para_trace()
     return resultado
+
+
+def executar_cadastro(conn, intencao: Intencao, *,
+                      agora: datetime | None = None) -> dict:
+    """Cria a ficha, se os dados fecharem e o paciente tiver confirmado.
+
+    Um CPF errado aqui não gera um agendamento errado: gera **uma pessoa que
+    não existe**, que mais tarde colide com o cadastro verdadeiro de alguém.
+    Por isso o dígito verificador é conferido em código — o modelo não tem como
+    saber se um CPF é válido, e não deveria tentar adivinhar.
+    """
+    dados = intencao.cadastro or {}
+    violacoes: list[Violacao] = []
+    ok: list[str] = []
+
+    if not intencao.idempotency_key:
+        violacoes.append(Violacao("R1_chave", "Cadastro sem chave de idempotência.", {}))
+    else:
+        ok.append("R1_chave")
+
+    nome = (dados.get("nome") or "").strip()
+    cpf = db.so_digitos(dados.get("cpf") or "")
+    telefone = db.so_digitos(dados.get("telefone") or "")
+    nascimento = normalizar_nascimento(dados.get("nascimento") or "",
+                                       (agora or datetime.now()).date())
+
+    faltando = [rotulo for rotulo, valor in
+                (("nome", len(nome.split()) >= 2), ("CPF", len(cpf) == 11),
+                 ("telefone", len(telefone) >= 10), ("nascimento", bool(nascimento)))
+                if not valor]
+    if faltando:
+        violacoes.append(Violacao(
+            "R11_dados", f"Faltam dados para o cadastro: {', '.join(faltando)}.",
+            {"faltando": faltando}))
+    else:
+        ok.append("R11_dados")
+
+    if len(cpf) == 11 and not cpf_valido(cpf):
+        violacoes.append(Violacao(
+            "R12_cpf", "Esse CPF não é válido — os dígitos verificadores não "
+                       "fecham. Peça para repetir.", {"digitos": len(cpf)}))
+    elif len(cpf) == 11:
+        ok.append("R12_cpf")
+
+    ja = conn.execute("SELECT * FROM pacientes WHERE cpf = ?", (cpf,)).fetchone() if cpf else None
+    if ja and casar_nome(nome, [ja["nome"]], corte=0.80)["melhor"]:
+        # Mesmo CPF e mesmo nome é repetição, não conflito: a rede caiu, ou o
+        # paciente confirmou duas vezes. Devolver erro aqui faria o agente
+        # dizer "esse CPF já está cadastrado" para a própria pessoa que acabou
+        # de ditá-lo.
+        return {"ok": True, "idempotente": True,
+                "paciente": tools._paciente_publico(ja),
+                "mensagem": "Esse cadastro já existe.",
+                "veredito": Veredito(True, (), tuple(ok + ["R13_duplicado"])).para_trace()}
+    if ja:
+        violacoes.append(Violacao(
+            "R13_duplicado", "Esse CPF já está cadastrado em outro nome.",
+            {"nome_no_cadastro": ja["nome"]}))
+    elif telefone and conn.execute(
+            "SELECT 1 FROM pacientes WHERE telefone LIKE ?",
+            (f"%{telefone[-8:]}",)).fetchone():
+        violacoes.append(Violacao(
+            "R13_duplicado", "Já existe cadastro com esse telefone.", {}))
+    else:
+        ok.append("R13_duplicado")
+
+    violacoes.extend(_validar_confirmacao_cadastro(intencao, nome, cpf, ok))
+
+    if violacoes:
+        return _reprovado(Veredito(False, tuple(violacoes), tuple(ok)))
+
+    r = tools.cadastrar_paciente(
+        conn, nome=nome, telefone=telefone, cpf=cpf, nascimento=nascimento,
+        idempotency_key=intencao.idempotency_key, agora=agora)
+    r["veredito"] = Veredito(True, (), tuple(ok)).para_trace()
+    return r
+
+
+def _validar_confirmacao_cadastro(intencao, nome, cpf, ok) -> list[Violacao]:
+    """O agente tem de ter lido o nome e o CPF de volta, e ouvido um sim.
+
+    É a R8 outra vez, com as entidades do cadastro: se ele leu um CPF diferente
+    do que vai gravar, a ficha nasce errada e ninguém percebe até a colisão.
+    """
+    conf = intencao.confirmacao
+    if conf is None:
+        return [Violacao("R8_confirmacao",
+                         "Cadastro sem confirmação verbal do paciente.", {})]
+    if interpretar_resposta(conf.resposta) != "sim":
+        return [Violacao("R8_confirmacao", "O paciente não confirmou os dados.",
+                         {"resposta": conf.resposta})]
+
+    dito = conf.frase_dita or ""
+    divergencias = []
+    sobrenome = nome.split()[-1] if nome.split() else ""
+    if sobrenome and not casar_nome(sobrenome, tokenizar(dito), corte=0.85)["melhor"]:
+        divergencias.append(f"o agente não leu o nome «{nome}» de volta")
+    # Contido, não igual: a frase boa lê o CPF **e** a data de nascimento de
+    # volta ("CPF 111 444 777 35, nascido em quinze do três de oitenta"), e
+    # comparar o total de dígitos reprovava justamente o agente que confirma
+    # tudo. Exigir os 11 dígitos em ordem continua pegando o CPF trocado.
+    if cpf and cpf not in extrair_digitos(dito):
+        divergencias.append("o CPF lido em voz alta não é o que ia ser gravado")
+    if divergencias:
+        return [Violacao("R8_confirmacao",
+                         "O que o agente confirmou não bate com o cadastro.",
+                         {"frase_dita": dito[:160], "divergencias": divergencias})]
+    ok.append("R8_confirmacao")
+    return []
 
 
 def executar_cancelamento(conn, intencao: Intencao, *,
