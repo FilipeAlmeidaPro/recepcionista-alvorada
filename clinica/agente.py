@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 
 from clinica import db, tools, validador
+from clinica.idioma import PT, Idioma, detectar
 from clinica.normalizador import (Restricao, interpretar_restricao,
                                   limpar_para_voz, mesclar_restricoes)
 from clinica.provedor import Provedor
@@ -31,13 +32,19 @@ SISTEMA = f"""Você é a recepcionista da {CLINICA}, atendendo por telefone.
 
 QUANDO É AGORA
 {{agora}}
-Cumprimente de acordo com a hora: bom dia até meio-dia, boa tarde até as 18h,
-boa noite depois disso. Nunca invente a hora nem o dia; eles estão acima.
+O cumprimento certo para esta hora é "{{saudacao}}". Nunca invente a hora nem
+o dia; eles estão acima.
+
+IDIOMA
+{{idioma}}
+Responda sempre no idioma em que o paciente está falando, do primeiro turno ao
+último. Se ele trocar de idioma no meio da ligação, troque junto. Nunca misture
+os dois na mesma frase.
 
 CANAL
-Você está em uma ligação. Fale curto, em português do Brasil, como uma pessoa
-fala — não como um texto escrito. Uma pergunta por vez. Nada de listas, títulos
-ou markdown: tudo o que você escrever será falado em voz alta.
+Você está em uma ligação. Fale curto, como uma pessoa fala — não como um texto
+escrito. Uma pergunta por vez. Nada de listas, títulos ou markdown: tudo o que
+você escrever será falado em voz alta.
 Na primeira fala da ligação, avise que a chamada é gravada.
 
 LIMITE CLÍNICO
@@ -53,11 +60,13 @@ agendar imediatamente e chame transferir_para_humano com motivo
 "risco_clinico". Não faça triagem, não pergunte detalhes, não ofereça horário.
 
 SEM CADASTRO
-Se buscar_paciente não encontrar ninguém, ofereça fazer o cadastro. Peça, uma
-coisa por vez: nome completo, CPF, data de nascimento. O telefone você já tem.
-Leia o nome e o CPF de volta em voz alta, dígito por dígito, e espere o
-paciente confirmar antes de chamar propor_cadastro. Um dígito errado aqui cria
-uma ficha que vai colidir com a de outra pessoa mais tarde.
+Se buscar_paciente não encontrar ninguém, ofereça fazer o cadastro. Peça duas
+coisas, uma por vez: nome completo e telefone com DDD. Nada mais — não peça
+CPF nem data de nascimento; se o paciente oferecer, aceite, mas nunca peça.
+Leia o nome e o telefone de volta em voz alta, dígito por dígito, e espere o
+paciente confirmar antes de chamar propor_cadastro. Sem CPF, o telefone é a
+identidade da ficha: um dígito errado cria um cadastro que a pessoa nunca mais
+vai conseguir encontrar.
 
 AGENDA
 Só ofereça horários que vieram de consultar_agenda, exatamente como vieram.
@@ -101,15 +110,17 @@ FERRAMENTAS = [
     {"type": "function", "function": {
         "name": "propor_cadastro",
         "description": ("Cria a ficha de um paciente que ainda não tem cadastro. "
-                        "Só depois de ler nome e CPF de volta em voz alta e o "
-                        "paciente confirmar. Passa por validação antes de gravar."),
+                        "Precisa só de nome e telefone. Só depois de ler os dois "
+                        "de volta em voz alta e o paciente confirmar. Passa por "
+                        "validação antes de gravar."),
         "parameters": {"type": "object", "properties": {
             "nome": {"type": "string", "description": "nome completo, como falado"},
             "telefone": {"type": "string", "description": "com DDD, como falado"},
-            "cpf": {"type": "string", "description": "como falado"},
-            "nascimento": {"type": "string",
-                           "description": "data de nascimento, como falada"}},
-            "required": ["nome", "telefone", "cpf", "nascimento"]}}},
+            "cpf": {"type": ["string", "null"],
+                    "description": "opcional; só se o paciente oferecer"},
+            "nascimento": {"type": ["string", "null"],
+                           "description": "opcional; só se o paciente oferecer"}},
+            "required": ["nome", "telefone"]}}},
     {"type": "function", "function": {
         "name": "propor_reserva",
         "description": ("Propõe marcar um horário já oferecido e já confirmado em voz "
@@ -155,16 +166,19 @@ class Turno:
 
 class Agente:
     def __init__(self, conn, provedor: Provedor, *, ligacao_id: str,
-                 agora: datetime, hoje: date | None = None):
+                 agora: datetime, hoje: date | None = None,
+                 idioma: Idioma = PT, detectar_idioma: bool = True):
         self.conn = conn
         self.provedor = provedor
         self.ligacao_id = ligacao_id
         self.agora = agora
         self.hoje = hoje or agora.date()
-        self.mensagens: list[dict] = [
-            {"role": "system", "content": SISTEMA.format(
-                agora=f"{db.descrever(agora)}. Data de hoje: "
-                      f"{self.hoje.isoformat()}.")}]
+        self.idioma = idioma
+        # Desligável: numa ligação que já se sabe em português, trocar de
+        # idioma no meio é sempre erro, nunca acerto.
+        self.detectar_idioma = detectar_idioma
+        self.mensagens: list[dict] = [{"role": "system",
+                                       "content": self._prompt_sistema()}]
         self.turnos: list[Turno] = []
 
         self.paciente_id: int | None = None
@@ -174,12 +188,40 @@ class Agente:
         self.agendamento_id: int | None = None
         self.transferencia: dict | None = None
 
+    def _prompt_sistema(self) -> str:
+        return SISTEMA.format(
+            agora=f"{db.descrever(self.agora, self.idioma)}. "
+                  f"Data de hoje: {self.hoje.isoformat()}.",
+            idioma=self.idioma.diretriz,
+            saudacao=self.idioma.saudacao(self.agora))
+
+    def _ajustar_idioma(self, texto: str) -> None:
+        """Troca a língua da ligação quando o paciente troca — e só então.
+
+        O prompt do sistema é reescrito no lugar, não acrescentado: mandar duas
+        diretrizes de idioma contraditórias no mesmo histórico produz respostas
+        misturadas, que é pior do que ter começado na língua errada.
+        """
+        if not self.detectar_idioma:
+            return
+        novo = detectar(texto, self.idioma)
+        if novo is self.idioma:
+            return
+        self.idioma = novo
+        self.mensagens[0] = {"role": "system", "content": self._prompt_sistema()}
+        # A restrição foi lida com as tabelas da língua anterior. Mantê-la
+        # significaria filtrar a agenda por uma interpretação que o paciente
+        # nunca fez na língua em que está falando.
+        self.restricao = Restricao()
+
     # --- laço principal ---
 
     def dizer(self, texto: str) -> Turno:
         """Um turno do paciente. Devolve o que o agente respondeu e o trace."""
+        self._ajustar_idioma(texto)
         self.restricao = mesclar_restricoes(
-            self.restricao, interpretar_restricao(texto, self.hoje))
+            self.restricao, interpretar_restricao(texto, self.hoje, self.idioma),
+            self.idioma)
         self.mensagens.append({"role": "user", "content": texto})
 
         turno = Turno(fala_paciente=texto, fala_agente="")
@@ -266,7 +308,7 @@ class Agente:
     def _t_consultar_agenda(self, args, _fala) -> dict:
         filtros = {} if args.get("ignorar_restricao") else self.restricao.como_filtros()
         r = tools.consultar_agenda(self.conn, especialidade=args.get("especialidade", ""),
-                                   agora=self.agora, **filtros)
+                                   agora=self.agora, idi=self.idioma, **filtros)
         for slot in r.get("slots", []):
             self.slots_oferecidos.add(slot["slot_id"])
         if r.get("alternativa"):
@@ -274,7 +316,7 @@ class Agente:
         if self.restricao.ambigua and not args.get("ignorar_restricao"):
             r["confirme_a_restricao"] = (
                 f"Entendi «{self.restricao.interpretacao}» — confirme isso em voz "
-                f"alta com o paciente antes de marcar.")
+                f"alta com o paciente, no idioma da ligação, antes de marcar.")
         return r
 
     def _t_propor_cadastro(self, args, fala_paciente: str) -> dict:
@@ -283,7 +325,8 @@ class Agente:
             idempotency_key=f"{self.ligacao_id}:cadastro",
             confirmacao=ConfirmacaoVerbal(self.ultima_fala_agente, fala_paciente),
             cadastro={k: args.get(k, "") for k in
-                      ("nome", "telefone", "cpf", "nascimento")})
+                      ("nome", "telefone", "cpf", "nascimento")},
+            idioma=self.idioma)
         r = validador.executar_cadastro(self.conn, intencao, agora=self.agora)
         if r.get("ok"):
             # Cadastrou: a ligação passa a ter paciente, e o pedido segue.
@@ -299,7 +342,8 @@ class Agente:
             idempotency_key=f"{self.ligacao_id}:{args.get('slot_id')}",
             restricao=self.restricao,
             confirmacao=ConfirmacaoVerbal(self.ultima_fala_agente, fala_paciente),
-            slots_oferecidos=tuple(sorted(self.slots_oferecidos)))
+            slots_oferecidos=tuple(sorted(self.slots_oferecidos)),
+            idioma=self.idioma)
         r = validador.executar_reserva(self.conn, intencao, agora=self.agora)
         if r.get("ok"):
             self.agendamento_id = r["agendamento"]["id"]
@@ -312,7 +356,8 @@ class Agente:
             agendamento_id=args.get("agendamento_id"),
             restricao=self.restricao,
             confirmacao=ConfirmacaoVerbal(self.ultima_fala_agente, fala_paciente),
-            slots_oferecidos=tuple(sorted(self.slots_oferecidos)))
+            slots_oferecidos=tuple(sorted(self.slots_oferecidos)),
+            idioma=self.idioma)
         r = validador.executar_reagendamento(self.conn, intencao, agora=self.agora)
         if r.get("ok"):
             self.agendamento_id = r["agendamento"]["id"]
@@ -323,7 +368,8 @@ class Agente:
             slot_id=0, paciente_id=self.paciente_id or 0,
             idempotency_key=f"{self.ligacao_id}:cancel:{args.get('agendamento_id')}",
             agendamento_id=args.get("agendamento_id"),
-            confirmacao=ConfirmacaoVerbal(self.ultima_fala_agente, fala_paciente))
+            confirmacao=ConfirmacaoVerbal(self.ultima_fala_agente, fala_paciente),
+            idioma=self.idioma)
         r = validador.executar_cancelamento(self.conn, intencao, agora=self.agora)
         if r.get("ok") and self.agendamento_id == args.get("agendamento_id"):
             self.agendamento_id = None

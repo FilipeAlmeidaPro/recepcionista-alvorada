@@ -317,34 +317,33 @@ class TestReagendamento(BaseValidador):
         self.assertEqual(r["regra"], "R10_origem")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestCadastro(BaseValidador):
-    """R11/R12/R13 + a R8 outra vez, agora com as entidades da ficha.
+    """Nome e telefone — só isso. Quem liga de fora não tem CPF, e exigir
+    documento para marcar consulta transforma um cadastro de dois campos numa
+    entrevista.
 
-    O teste que importa aqui é `test_agente_leu_um_cpf_diferente_do_que_ia_gravar`:
-    os dados estão completos, o CPF é válido, o paciente disse sim — e a escrita
-    é bloqueada porque o número lido em voz alta não é o número que ia para o
-    banco. Uma ficha nascida assim não dá erro nenhum: só colide, anos depois,
-    com o cadastro verdadeiro de outra pessoa."""
+    O teste que importa aqui é `test_agente_leu_um_telefone_diferente`: sem
+    CPF, o telefone é a identidade da ficha. Se o agente leu um número e gravou
+    outro, a pessoa fica com um cadastro que nunca mais vai encontrar — e nada
+    nisso dá erro."""
 
-    NOME, CPF = "Joana Ribeiro Alves", "11144477735"
-    DADOS = dict(nome=NOME, telefone="11987650000", cpf=CPF,
-                 nascimento="quinze de março de mil novecentos e oitenta")
+    NOME, TEL = "Beatriz Camargo Nogueira", "11961230000"
 
-    def fala(self, nome=None, cpf=None):
-        return (f"Então: {nome or self.NOME}, CPF "
-                f"{ler_digitos(cpf or self.CPF, 'cpf')}, nascido em quinze do "
-                f"três de oitenta. Confirma?")
+    def fala(self, nome=None, telefone=None, cpf=None):
+        frase = (f"Então: {nome or self.NOME}, telefone "
+                 f"{ler_digitos(telefone or self.TEL, 'telefone')}")
+        if cpf:
+            frase += f", CPF {ler_digitos(cpf, 'cpf')}"
+        return frase + ". Confirma?"
 
     def cadastro(self, *, resposta="isso", chave="lig-1", frase=None, **muda):
-        return Intencao(
-            slot_id=0, paciente_id=0, idempotency_key=chave,
-            confirmacao=ConfirmacaoVerbal(frase if frase is not None else self.fala(),
-                                          resposta),
-            cadastro={**self.DADOS, **muda})
+        dados = {"nome": self.NOME, "telefone": self.TEL,
+                 "cpf": None, "nascimento": None, **muda}
+        if frase is None:
+            frase = self.fala(dados["nome"], dados["telefone"], dados["cpf"])
+        return Intencao(slot_id=0, paciente_id=0, idempotency_key=chave,
+                        confirmacao=ConfirmacaoVerbal(frase, resposta),
+                        cadastro=dados)
 
     def executar(self, **kw):
         return validador.executar_cadastro(self.conn, self.cadastro(**kw), agora=AGORA)
@@ -357,18 +356,25 @@ class TestCadastro(BaseValidador):
 
     # --- caminho feliz -------------------------------------------------------
 
-    def test_dados_completos_e_confirmados_gravam(self):
+    def test_nome_e_telefone_bastam(self):
         r = self.executar()
         self.assertTrue(r["ok"])
         self.assertEqual(r["paciente"]["nome"], self.NOME)
 
-    def test_a_data_falada_chega_normalizada_ao_banco(self):
-        """O modelo mandou "quinze de março de mil novecentos e oitenta"; quem
-        converteu para data foi o código."""
+    def test_a_ficha_nasce_sem_cpf_e_isso_nao_e_erro(self):
         self.executar()
+        linha = self.conn.execute("SELECT cpf, nascimento FROM pacientes "
+                                  "WHERE nome = ?", (self.NOME,)).fetchone()
+        self.assertIsNone(linha["cpf"])
+        self.assertIsNone(linha["nascimento"])
+
+    def test_duas_fichas_sem_cpf_convivem(self):
+        """O UNIQUE do CPF continua valendo; NULL não colide com NULL."""
+        self.executar()
+        self.executar(chave="lig-2", nome="Carlos Mendes Souza",
+                      telefone="11955559999")
         self.assertEqual(self.conn.execute(
-            "SELECT nascimento FROM pacientes WHERE cpf=?", (self.CPF,)).fetchone()[0],
-            "1980-03-15")
+            "SELECT count(*) FROM pacientes WHERE cpf IS NULL").fetchone()[0], 2)
 
     def test_veredito_nomeia_as_regras_de_cadastro(self):
         v = self.executar()["veredito"]
@@ -376,18 +382,53 @@ class TestCadastro(BaseValidador):
                          {"R1_chave", "R11_dados", "R12_cpf", "R13_duplicado",
                           "R8_confirmacao"})
 
+    # --- CPF opcional --------------------------------------------------------
+
+    def test_cpf_oferecido_pelo_paciente_e_gravado(self):
+        """Não pedimos, mas se a pessoa dá, guardamos — e conferimos."""
+        self.executar(cpf="11144477735")
+        self.assertEqual(self.conn.execute(
+            "SELECT cpf FROM pacientes WHERE nome = ?", (self.NOME,)).fetchone()[0],
+            "11144477735")
+
+    def test_R12_so_dispara_quando_ha_cpf(self):
+        self.assertIn("R12_cpf", self.executar()["veredito"]["regras_ok"])
+
+    def test_R12_cpf_com_digito_invalido(self):
+        """O modelo não tem como calcular dígito verificador, e não deveria
+        tentar. Se veio torto, é melhor seguir sem CPF do que gravar um falso."""
+        self.recusa("R12_cpf", cpf="11144477700")
+
+    def test_R12_cpf_incompleto(self):
+        self.recusa("R12_cpf", cpf="1114447")
+
+    def test_nascimento_oferecido_chega_normalizado(self):
+        self.executar(nascimento="quinze de março de mil novecentos e oitenta")
+        self.assertEqual(self.conn.execute(
+            "SELECT nascimento FROM pacientes WHERE nome = ?",
+            (self.NOME,)).fetchone()[0], "1980-03-15")
+
+    def test_nascimento_ilegivel_nao_bloqueia_o_cadastro(self):
+        """Antes isto era R11. Não pedimos a data; não faz sentido reprovar a
+        ficha porque a data que ninguém pediu veio ilegível."""
+        self.assertTrue(self.executar(nascimento="ah, não lembro")["ok"])
+
     # --- R8: o que foi dito em voz alta --------------------------------------
 
-    def test_agente_leu_um_cpf_diferente_do_que_ia_gravar(self):
-        r = self.recusa("R8_confirmacao", frase=self.fala(cpf="52998224725"))
-        self.assertIn("CPF lido em voz alta",
+    def test_agente_leu_um_telefone_diferente(self):
+        r = self.recusa("R8_confirmacao", frase=self.fala(telefone="11999998888"))
+        self.assertIn("telefone lido em voz alta",
                       " ".join(r["veredito"]["violacoes"][0]["divergencias"]))
         self.assertIsNone(self.conn.execute(
-            "SELECT 1 FROM pacientes WHERE cpf=?", (self.CPF,)).fetchone())
+            "SELECT 1 FROM pacientes WHERE nome = ?", (self.NOME,)).fetchone())
+
+    def test_agente_leu_um_cpf_diferente_do_que_ia_gravar(self):
+        self.recusa("R8_confirmacao", cpf="11144477735",
+                    frase=self.fala(cpf="52998224725"))
 
     def test_agente_nao_leu_o_nome_de_volta(self):
-        self.recusa("R8_confirmacao", frase=f"Confirma o CPF "
-                                            f"{ler_digitos(self.CPF, 'cpf')}?")
+        self.recusa("R8_confirmacao",
+                    frase=f"Confirma o telefone {ler_digitos(self.TEL, 'telefone')}?")
 
     def test_paciente_disse_nao(self):
         self.recusa("R8_confirmacao", resposta="não, tá errado")
@@ -399,56 +440,40 @@ class TestCadastro(BaseValidador):
         self.recusa("R8_confirmacao", resposta="")
 
     def test_sem_turno_de_confirmacao_nenhum(self):
-        i = self.cadastro()
         r = validador.executar_cadastro(
             self.conn, Intencao(slot_id=0, paciente_id=0, idempotency_key="k",
-                                confirmacao=None, cadastro=i.cadastro), agora=AGORA)
+                                confirmacao=None,
+                                cadastro={"nome": self.NOME, "telefone": self.TEL}),
+            agora=AGORA)
         self.assertEqual(r["regra"], "R8_confirmacao")
 
-    # --- R11: dados incompletos ----------------------------------------------
+    # --- R11: o mínimo -------------------------------------------------------
 
     def test_R11_nome_incompleto(self):
-        r = self.recusa("R11_dados", nome="Joana")
+        r = self.recusa("R11_dados", nome="Beatriz")
         self.assertIn("nome", r["veredito"]["violacoes"][0]["faltando"])
 
-    def test_R11_nascimento_ilegivel(self):
-        r = self.recusa("R11_dados", nascimento="ah, não lembro")
-        self.assertIn("nascimento", r["veredito"]["violacoes"][0]["faltando"])
-
     def test_R11_telefone_curto(self):
-        self.recusa("R11_dados", telefone="9876")
-
-    def test_R11_cpf_incompleto(self):
-        self.recusa("R11_dados", cpf="1114447")
-
-    # --- R12: dígito verificador ---------------------------------------------
-
-    def test_R12_cpf_com_digito_invalido(self):
-        """O modelo não tem como saber se um CPF fecha, e não deveria tentar."""
-        self.recusa("R12_cpf", cpf="11144477700",
-                    frase=self.fala(cpf="11144477700"))
-
-    def test_R12_cpf_de_digitos_repetidos(self):
-        self.recusa("R12_cpf", cpf="11111111111",
-                    frase=self.fala(cpf="11111111111"))
+        r = self.recusa("R11_dados", telefone="9876")
+        self.assertIn("telefone", r["veredito"]["violacoes"][0]["faltando"])
 
     # --- R13: já existe ------------------------------------------------------
 
-    def test_R13_cpf_de_outra_pessoa(self):
+    def test_R13_telefone_de_outra_pessoa(self):
+        """Sem CPF, o telefone é a identidade — e duas pessoas com o mesmo
+        número e nomes diferentes é o caso que precisa de gente."""
         self.executar()
-        r = self.recusa("R13_duplicado", chave="lig-2", nome="Carlos Mendes Souza",
-                        frase=self.fala(nome="Carlos Mendes Souza"))
-        self.assertEqual(r["veredito"]["violacoes"][0]["nome_no_cadastro"],
-                         self.NOME)
+        r = self.recusa("R13_duplicado", chave="lig-2", nome="Carlos Mendes Souza")
+        self.assertEqual(r["veredito"]["violacoes"][0]["nome_no_cadastro"], self.NOME)
 
-    def test_R13_telefone_ja_cadastrado(self):
-        tel = self.paciente()["telefone"]
-        self.recusa("R13_duplicado", telefone=tel)
+    def test_R13_cpf_de_outra_pessoa(self):
+        self.executar(cpf="11144477735")
+        self.recusa("R13_duplicado", chave="lig-2", nome="Carlos Mendes Souza",
+                    telefone="11955557777", cpf="11144477735")
 
     def test_repetir_o_mesmo_cadastro_e_idempotente_e_nao_erro(self):
-        """A rede caiu, ou o paciente confirmou duas vezes. Devolver
-        "esse CPF já está cadastrado" para a própria pessoa que acabou de
-        ditá-lo é um bug, não uma proteção."""
+        """A rede caiu, ou o paciente confirmou duas vezes. Devolver "já está
+        cadastrado" para quem acabou de se cadastrar é um bug."""
         a = self.executar()
         b = self.executar(chave="lig-2")
         self.assertTrue(b["ok"])
@@ -457,11 +482,9 @@ class TestCadastro(BaseValidador):
 
     def test_nenhuma_recusa_deixa_ficha_no_banco(self):
         antes = self.conn.execute("SELECT count(*) FROM pacientes").fetchone()[0]
-        for kw in ({"nome": "Joana"}, {"cpf": "11144477700",
-                                       "frase": self.fala(cpf="11144477700")},
-                   {"resposta": "não"}, {"nascimento": "sei lá"},
-                   {"frase": "Confirma?"}, {"chave": ""}):
-            self.assertFalse(self.executar(**kw)["ok"])
+        for kw in ({"nome": "Beatriz"}, {"telefone": "12"}, {"resposta": "não"},
+                   {"cpf": "11144477700"}, {"frase": "Confirma?"}, {"chave": ""}):
+            self.assertFalse(self.executar(**kw)["ok"], kw)
         self.assertEqual(
             self.conn.execute("SELECT count(*) FROM pacientes").fetchone()[0], antes)
 
@@ -469,3 +492,7 @@ class TestCadastro(BaseValidador):
 
     def test_R1_sem_chave_de_idempotencia(self):
         self.recusa("R1_chave", chave="")
+
+
+if __name__ == "__main__":
+    unittest.main()

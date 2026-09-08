@@ -18,6 +18,7 @@ import sqlite3
 from datetime import datetime
 
 from clinica import db
+from clinica.idioma import PT
 from clinica.normalizador import casar_especialidade, ler_digitos
 
 MOTIVOS_TRANSFERENCIA = ("risco_clinico", "fora_de_escopo", "frustracao",
@@ -44,7 +45,7 @@ def _paciente_publico(linha: sqlite3.Row) -> dict:
     }
 
 
-def _slot_publico(linha: sqlite3.Row) -> dict:
+def _slot_publico(linha: sqlite3.Row, idi=None) -> dict:
     inicio = db.parse(linha["inicio"])
     return {
         "slot_id": linha["id"],
@@ -53,7 +54,7 @@ def _slot_publico(linha: sqlite3.Row) -> dict:
         "especialidade": linha["especialidade"],
         "inicio": linha["inicio"],
         "fim": linha["fim"],
-        "descricao": db.descrever(inicio),
+        "descricao": db.descrever(inicio, idi),
     }
 
 
@@ -101,7 +102,7 @@ def consultar_agenda(conn, *, especialidade: str, hora_min: str | None = None,
                      hora_max: str | None = None, data_inicio: str | None = None,
                      data_fim: str | None = None, dias_semana: list[int] | None = None,
                      profissional_id: int | None = None, limite: int = LIMITE_PADRAO,
-                     agora: datetime | None = None) -> dict:
+                     agora: datetime | None = None, idi=None) -> dict:
     """Horários livres reais, filtrados pela restrição declarada pelo paciente.
 
     `hora_min`/`hora_max` são o horário de INÍCIO aceito, inclusive nas duas
@@ -114,7 +115,7 @@ def consultar_agenda(conn, *, especialidade: str, hora_min: str | None = None,
     momento = _agora(agora)
     catalogo = _especialidades(conn)
     nomes = [r["nome"] for r in catalogo.values()]
-    casada = casar_especialidade(especialidade, nomes)
+    casada = casar_especialidade(especialidade, nomes, idi or PT)
     if casada is None:
         return _falha("especialidade_inexistente",
                       f"A clínica não atende {especialidade}.",
@@ -154,14 +155,14 @@ def consultar_agenda(conn, *, especialidade: str, hora_min: str | None = None,
 
     if linhas:
         return {"ok": True, "total": len(linhas),
-                "slots": [_slot_publico(r) for r in linhas[:limite]]}
+                "slots": [_slot_publico(r, idi) for r in linhas[:limite]]}
 
     alternativa = conn.execute(base + filtros + " ORDER BY s.inicio LIMIT 1", args).fetchone()
     return {
         "ok": True, "total": 0, "slots": [],
         "motivo": "nenhum_horario_na_restricao",
         "mensagem": "Não tenho nada livre dentro dessa restrição.",
-        "alternativa": _slot_publico(alternativa) if alternativa else None,
+        "alternativa": _slot_publico(alternativa, idi) if alternativa else None,
     }
 
 
@@ -169,7 +170,7 @@ def consultar_agenda(conn, *, especialidade: str, hora_min: str | None = None,
 
 def reservar_horario(conn, *, slot_id: int, paciente_id: int, idempotency_key: str,
                      motivo: str | None = None, origem: str = "voz",
-                     agora: datetime | None = None) -> dict:
+                     agora: datetime | None = None, idi=None) -> dict:
     """Escrita. Idempotente por chave, atômica por transação.
 
     Double-booking não é evitado aqui por cuidado — é impossível pelo índice
@@ -182,7 +183,8 @@ def reservar_horario(conn, *, slot_id: int, paciente_id: int, idempotency_key: s
     ja = conn.execute(
         "SELECT * FROM agendamentos WHERE idempotency_key = ?", (idempotency_key,)).fetchone()
     if ja:
-        return {"ok": True, "idempotente": True, **_agendamento_publico(conn, ja["id"])}
+        return {"ok": True, "idempotente": True,
+                **_agendamento_publico(conn, ja["id"], idi)}
 
     momento = _agora(agora)
     if conn.execute("SELECT 1 FROM pacientes WHERE id = ?", (paciente_id,)).fetchone() is None:
@@ -214,10 +216,10 @@ def reservar_horario(conn, *, slot_id: int, paciente_id: int, idempotency_key: s
         conn.execute("ROLLBACK")
         return _falha("slot_indisponivel", "Esse horário acabou de ser ocupado.")
 
-    return {"ok": True, "idempotente": False, **_agendamento_publico(conn, novo_id)}
+    return {"ok": True, "idempotente": False, **_agendamento_publico(conn, novo_id, idi)}
 
 
-def _agendamento_publico(conn, agendamento_id: int) -> dict:
+def _agendamento_publico(conn, agendamento_id: int, idi=None) -> dict:
     r = conn.execute("""
         SELECT a.id, a.status, a.criado_em, a.idempotency_key,
                s.id AS slot_id, s.inicio, s.fim,
@@ -241,14 +243,14 @@ def _agendamento_publico(conn, agendamento_id: int) -> dict:
         # Frase única que o agente repete de volta. É contra ela que a métrica
         # de alucinação de entidade compara o que saiu no áudio.
         "confirmacao": (f"{r['prof_nome']}, {r['especialidade']}, "
-                        f"{db.descrever(inicio)}"),
+                        f"{db.descrever(inicio, idi)}"),
     }
 
 
 # --- 4. reagendar ------------------------------------------------------------
 
 def reagendar(conn, *, agendamento_id: int, novo_slot_id: int, idempotency_key: str,
-              agora: datetime | None = None) -> dict:
+              agora: datetime | None = None, idi=None) -> dict:
     """Move um agendamento. Libera o slot antigo e ocupa o novo, ou não faz nada."""
     if not idempotency_key:
         return _falha("chave_ausente", "Reagendamento sem chave de idempotência foi recusado.")
@@ -256,7 +258,8 @@ def reagendar(conn, *, agendamento_id: int, novo_slot_id: int, idempotency_key: 
     ja = conn.execute(
         "SELECT * FROM agendamentos WHERE idempotency_key = ?", (idempotency_key,)).fetchone()
     if ja:
-        return {"ok": True, "idempotente": True, **_agendamento_publico(conn, ja["id"])}
+        return {"ok": True, "idempotente": True,
+                **_agendamento_publico(conn, ja["id"], idi)}
 
     momento = _agora(agora)
     atual = conn.execute("""
@@ -308,26 +311,28 @@ def reagendar(conn, *, agendamento_id: int, novo_slot_id: int, idempotency_key: 
         return _falha("slot_indisponivel", "Esse horário acabou de ser ocupado.")
 
     return {"ok": True, "idempotente": False, "agendamento_anterior": agendamento_id,
-            **_agendamento_publico(conn, novo_id)}
+            **_agendamento_publico(conn, novo_id, idi)}
 
 
 # --- 5. cadastrar_paciente ---------------------------------------------------
 
-def cadastrar_paciente(conn, *, nome: str, telefone: str, cpf: str,
-                       nascimento: str, idempotency_key: str,
+def cadastrar_paciente(conn, *, nome: str, telefone: str, cpf: str | None = None,
+                       nascimento: str | None = None, idempotency_key: str,
                        agora: datetime | None = None) -> dict:
     """Cria a ficha. É a escrita que cria uma pessoa que não existia.
 
-    Errar aqui é pior que errar um horário: um CPF trocado não gera um
-    agendamento errado, gera **um paciente fantasma** que vai colidir com o
-    cadastro verdadeiro de alguém mais tarde. Por isso a unicidade do CPF é do
-    banco, não desta função — mesma escolha do double-booking.
+    Só nome e telefone são obrigatórios. CPF e nascimento entram quando o
+    paciente quer dar — e quando o CPF entra, a unicidade continua sendo do
+    banco, não desta função: mesma escolha do double-booking.
     """
     if not idempotency_key:
         return _falha("chave_ausente", "Cadastro sem chave de idempotência foi recusado.")
 
-    doc, tel = db.so_digitos(cpf), db.so_digitos(telefone)
-    ja = conn.execute("SELECT * FROM pacientes WHERE cpf = ?", (doc,)).fetchone()
+    doc, tel = db.so_digitos(cpf or ""), db.so_digitos(telefone)
+    ja = (conn.execute("SELECT * FROM pacientes WHERE cpf = ?", (doc,)).fetchone()
+          if doc else
+          conn.execute("SELECT * FROM pacientes WHERE telefone LIKE ?",
+                       (f"%{tel[-8:]}",)).fetchone() if len(tel) >= 8 else None)
     if ja:
         return {"ok": True, "idempotente": True, "paciente": _paciente_publico(ja),
                 "mensagem": "Esse cadastro já existe."}
@@ -337,7 +342,8 @@ def cadastrar_paciente(conn, *, nome: str, telefone: str, cpf: str,
         cur = conn.execute(
             "INSERT INTO pacientes (nome, cpf, telefone, nascimento, criado_em, "
             "origem) VALUES (?,?,?,?,?,'voz')",
-            (nome.strip(), doc, tel, nascimento, momento.strftime(db.FORMATO)))
+            (nome.strip(), doc or None, tel, nascimento or None,
+             momento.strftime(db.FORMATO)))
     except sqlite3.IntegrityError:
         return _falha("cpf_duplicado", "Esse CPF já está cadastrado.")
 

@@ -36,9 +36,9 @@ CREATE TABLE IF NOT EXISTS profissionais (
 CREATE TABLE IF NOT EXISTS pacientes (
     id          INTEGER PRIMARY KEY,
     nome        TEXT NOT NULL,
-    cpf         TEXT NOT NULL UNIQUE,   -- 11 dígitos, sem máscara
+    cpf         TEXT UNIQUE,            -- 11 dígitos; NULL em cadastro por voz
     telefone    TEXT NOT NULL,          -- 55DDNNNNNNNNN, sem símbolos
-    nascimento  TEXT NOT NULL,          -- YYYY-MM-DD
+    nascimento  TEXT,                   -- YYYY-MM-DD; opcional
     criado_em   TEXT,                   -- NULL nos semeados; data no cadastro por voz
     origem      TEXT                    -- 'seed' | 'voz'
 );
@@ -126,6 +126,41 @@ def criar_schema(conn: sqlite3.Connection) -> None:
         for coluna, tipo in colunas.items():
             if coluna not in existentes:
                 conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo}")
+    _afrouxar_pacientes(conn)
+
+
+def _afrouxar_pacientes(conn: sqlite3.Connection) -> None:
+    """Tira o NOT NULL de `cpf` e `nascimento` num banco que já existe.
+
+    `CREATE TABLE IF NOT EXISTS` não altera tabela, e o SQLite não sabe soltar
+    um NOT NULL com ALTER — só reconstruindo. Quem liga de fora não tem CPF, e
+    o cadastro por voz passou a pedir só nome e telefone; um banco semeado
+    antes disso continuaria recusando a escrita por uma restrição que já não
+    é regra."""
+    colunas = {r["name"]: r for r in conn.execute("PRAGMA table_info(pacientes)")}
+    if not colunas or not (colunas["cpf"]["notnull"] or colunas["nascimento"]["notnull"]):
+        return
+    conn.executescript("""
+        PRAGMA foreign_keys = OFF;
+        BEGIN;
+        CREATE TABLE pacientes_novo (
+            id          INTEGER PRIMARY KEY,
+            nome        TEXT NOT NULL,
+            cpf         TEXT UNIQUE,
+            telefone    TEXT NOT NULL,
+            nascimento  TEXT,
+            criado_em   TEXT,
+            origem      TEXT
+        );
+        INSERT INTO pacientes_novo (id, nome, cpf, telefone, nascimento, criado_em, origem)
+            SELECT id, nome, NULLIF(cpf, ''), telefone, NULLIF(nascimento, ''),
+                   criado_em, origem FROM pacientes;
+        DROP TABLE pacientes;
+        ALTER TABLE pacientes_novo RENAME TO pacientes;
+        CREATE INDEX IF NOT EXISTS idx_pacientes_telefone ON pacientes(telefone);
+        COMMIT;
+        PRAGMA foreign_keys = ON;
+    """)
 
 
 # --- helpers -----------------------------------------------------------------
@@ -185,21 +220,25 @@ MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
          "agosto", "setembro", "outubro", "novembro", "dezembro"]
 
 
-def descrever(quando: datetime) -> str:
-    """Texto pronto para TTS — e âncora para medir alucinação de entidade."""
-    hora = f"{quando.hour}h" if quando.minute == 0 else f"{quando.hour}h{quando.minute:02d}"
-    return (f"{DIAS[quando.weekday()]}, {quando.day} de {MESES[quando.month - 1]}, "
-            f"às {hora}")
+def descrever(quando: datetime, idi=None) -> str:
+    """Texto pronto para TTS — e âncora para medir alucinação de entidade.
+
+    Na língua da ligação: é esta string que o agente lê de volta em voz alta e
+    que a R8 confere. Entregá-la em português numa ligação em inglês obriga o
+    modelo a traduzir, e é a tradução — não o dado — que a R8 passa a validar.
+    """
+    from clinica.idioma import PT
+    return (idi or PT).descrever(quando)
 
 
-def saudacao(quando: datetime) -> str:
+def saudacao(quando: datetime, idi=None) -> str:
     """Bom dia, boa tarde ou boa noite — pela hora, não por chute.
 
     Estava fixo em "boa noite" no código do servidor, e o prompt do modelo
     nunca dizia que horas eram. Às 16h a clínica dava boa noite.
     """
-    hora = quando.hour
-    return "Bom dia" if hora < 12 else "Boa tarde" if hora < 18 else "Boa noite"
+    from clinica.idioma import PT
+    return (idi or PT).saudacao(quando)
 
 
 def parse(momento: str) -> datetime:

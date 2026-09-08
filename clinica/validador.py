@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from clinica import db, tools
+from clinica.idioma import PT, Idioma
 from clinica.normalizador import (DIAS_SEMANA, MESES, Restricao, _ler_hora,
                                   _ler_numero, _restricao_horaria, casar_nome,
                                   cpf_valido, extrair_digitos,
@@ -72,6 +73,9 @@ class Intencao:
     agendamento_id: int | None = None      # só em reagendamento
     slots_oferecidos: tuple[int, ...] | None = None
     cadastro: dict | None = None           # só em cadastro de paciente
+    # A língua da ligação. Sem ela a R8 compara "Friday, March fourth" contra
+    # uma tabela em português, não encontra dia nem mês, e aprova em silêncio.
+    idioma: Idioma = PT
 
 
 @dataclass(frozen=True)
@@ -101,37 +105,47 @@ class Veredito:
 
 # --- leitura da frase falada -------------------------------------------------
 
-def interpretar_resposta(resposta: str) -> str:
-    """'sim' / 'nao' / 'indefinido'. Silêncio e hesitação não são consentimento."""
+def interpretar_resposta(resposta: str, idi: Idioma = PT) -> str:
+    """'sim' / 'nao' / 'indefinido'. Silêncio e hesitação não são consentimento.
+
+    O idioma importa aqui mais do que em qualquer outro lugar: "no" é negação
+    em inglês e preposição em português ("no dia quinze"). Uma lista só,
+    somando as duas línguas, leria "pode ser no dia quinze" como recusa.
+    """
     tokens = set(tokenizar(resposta or ""))
-    if tokens & _NEGATIVOS:
+    if tokens & idi.negativos:
         return "nao"
-    if tokens & _AFIRMATIVOS:
+    if tokens & idi.afirmativos:
         return "sim"
     return "indefinido"
 
 
-def extrair_entidades(frase: str) -> dict:
+def extrair_entidades(frase: str, idi: Idioma = PT) -> dict:
     """Entidades que o agente disse em voz alta: hora, dia da semana, dia do mês."""
     tokens = tokenizar(frase or "")
-    hora_min, hora_max, _amb, _consumidos = _restricao_horaria(tokens)
+    hora_min, hora_max, _amb, _consumidos = _restricao_horaria(tokens, idi)
     hora = hora_min if hora_min and hora_min == hora_max else (hora_min or hora_max)
     if hora is None:
         bruto = _HORA_CRUA.search(frase or "")
         if bruto:
             hora = f"{int(bruto.group(1)):02d}:{int(bruto.group(2) or 0):02d}"
 
-    dia_semana = next((DIAS_SEMANA[t] for t in tokens if t in DIAS_SEMANA), None)
-    mes = next((MESES[t] for t in tokens if t in MESES), None)
+    dia_semana = next((idi.dias_semana[t] for t in tokens if t in idi.dias_semana), None)
+    mes = next((idi.meses[t] for t in tokens if t in idi.meses), None)
 
     dia_mes = None
     for i, tk in enumerate(tokens):
-        if tk == "dia":
-            valor, _ = _ler_numero(tokens, i + 1)
-        elif tk in MESES and i > 0:
-            valor, _ = _ler_numero(tokens, i - 1)
-            if valor is None and i > 1:
-                valor, _ = _ler_numero(tokens, i - 2)
+        if tk in idi.marcador_dia:
+            valor, _ = _ler_numero(tokens, i + 1, idi)
+        elif tk in idi.meses:
+            valor = None
+            for recuo in (1, 2):
+                if i - recuo >= 0:
+                    valor, _ = _ler_numero(tokens, i - recuo, idi)
+                    if valor is not None:
+                        break
+            if valor is None and idi.dia_apos_mes:
+                valor, _ = _ler_numero(tokens, i + 1, idi)
         else:
             continue
         if valor is not None and 1 <= valor <= 31:
@@ -264,13 +278,13 @@ def _validar_confirmacao(conn, intencao, slot, inicio, ok) -> list[Violacao]:
         return [Violacao("R8_confirmacao",
                          "Escrita sem confirmação verbal do paciente.", {})]
 
-    resposta = interpretar_resposta(conf.resposta)
+    resposta = interpretar_resposta(conf.resposta, intencao.idioma)
     if resposta != "sim":
         return [Violacao("R8_confirmacao",
                          "O paciente não confirmou.",
                          {"resposta": conf.resposta, "leitura": resposta})]
 
-    dito = extrair_entidades(conf.frase_dita)
+    dito = extrair_entidades(conf.frase_dita, intencao.idioma)
     divergencias = []
     if dito["hora"] is None:
         divergencias.append("o agente não disse o horário em voz alta")
@@ -323,12 +337,12 @@ def executar_reserva(conn, intencao: Intencao, *, agora: datetime | None = None,
 
 def executar_cadastro(conn, intencao: Intencao, *,
                       agora: datetime | None = None) -> dict:
-    """Cria a ficha, se os dados fecharem e o paciente tiver confirmado.
+    """Cria a ficha. Pede nome e telefone — só isso.
 
-    Um CPF errado aqui não gera um agendamento errado: gera **uma pessoa que
-    não existe**, que mais tarde colide com o cadastro verdadeiro de alguém.
-    Por isso o dígito verificador é conferido em código — o modelo não tem como
-    saber se um CPF é válido, e não deveria tentar adivinhar.
+    CPF e nascimento são opcionais de propósito: quem liga de fora do país não
+    tem CPF, e exigir um documento para marcar consulta transforma um cadastro
+    de dois campos numa entrevista. Quando o CPF vem, ele é conferido; quando
+    não vem, a ficha nasce sem ele e o telefone é a identidade.
     """
     dados = intencao.cadastro or {}
     violacoes: list[Violacao] = []
@@ -343,11 +357,11 @@ def executar_cadastro(conn, intencao: Intencao, *,
     cpf = db.so_digitos(dados.get("cpf") or "")
     telefone = db.so_digitos(dados.get("telefone") or "")
     nascimento = normalizar_nascimento(dados.get("nascimento") or "",
-                                       (agora or datetime.now()).date())
+                                       (agora or datetime.now()).date(),
+                                       intencao.idioma)
 
     faltando = [rotulo for rotulo, valor in
-                (("nome", len(nome.split()) >= 2), ("CPF", len(cpf) == 11),
-                 ("telefone", len(telefone) >= 10), ("nascimento", bool(nascimento)))
+                (("nome", len(nome.split()) >= 2), ("telefone", len(telefone) >= 10))
                 if not valor]
     if faltando:
         violacoes.append(Violacao(
@@ -356,71 +370,91 @@ def executar_cadastro(conn, intencao: Intencao, *,
     else:
         ok.append("R11_dados")
 
-    if len(cpf) == 11 and not cpf_valido(cpf):
+    # A R12 só existe quando há CPF. Um documento ausente não é um documento
+    # inválido — mas um documento presente e torto vira paciente fantasma.
+    if not cpf:
+        ok.append("R12_cpf")
+    elif len(cpf) != 11 or not cpf_valido(cpf):
         violacoes.append(Violacao(
             "R12_cpf", "Esse CPF não é válido — os dígitos verificadores não "
-                       "fecham. Peça para repetir.", {"digitos": len(cpf)}))
-    elif len(cpf) == 11:
+                       "fecham. Peça para repetir, ou siga sem ele.",
+            {"digitos": len(cpf)}))
+    else:
         ok.append("R12_cpf")
 
-    ja = conn.execute("SELECT * FROM pacientes WHERE cpf = ?", (cpf,)).fetchone() if cpf else None
-    if ja and casar_nome(nome, [ja["nome"]], corte=0.80)["melhor"]:
-        # Mesmo CPF e mesmo nome é repetição, não conflito: a rede caiu, ou o
+    ja = _ficha_existente(conn, cpf, telefone)
+    if ja is not None and casar_nome(nome, [ja["nome"]], corte=0.80)["melhor"]:
+        # Mesma pessoa de novo é repetição, não conflito: a rede caiu, ou o
         # paciente confirmou duas vezes. Devolver erro aqui faria o agente
-        # dizer "esse CPF já está cadastrado" para a própria pessoa que acabou
-        # de ditá-lo.
+        # dizer "já está cadastrado" para quem acabou de se cadastrar.
         return {"ok": True, "idempotente": True,
                 "paciente": tools._paciente_publico(ja),
                 "mensagem": "Esse cadastro já existe.",
                 "veredito": Veredito(True, (), tuple(ok + ["R13_duplicado"])).para_trace()}
-    if ja:
+    if ja is not None:
         violacoes.append(Violacao(
-            "R13_duplicado", "Esse CPF já está cadastrado em outro nome.",
+            "R13_duplicado",
+            "Esse CPF já está cadastrado em outro nome." if cpf and ja["cpf"] == cpf
+            else "Já existe cadastro com esse telefone, em outro nome.",
             {"nome_no_cadastro": ja["nome"]}))
-    elif telefone and conn.execute(
-            "SELECT 1 FROM pacientes WHERE telefone LIKE ?",
-            (f"%{telefone[-8:]}",)).fetchone():
-        violacoes.append(Violacao(
-            "R13_duplicado", "Já existe cadastro com esse telefone.", {}))
     else:
         ok.append("R13_duplicado")
 
-    violacoes.extend(_validar_confirmacao_cadastro(intencao, nome, cpf, ok))
+    violacoes.extend(_validar_confirmacao_cadastro(intencao, nome, telefone, cpf, ok))
 
     if violacoes:
         return _reprovado(Veredito(False, tuple(violacoes), tuple(ok)))
 
     r = tools.cadastrar_paciente(
-        conn, nome=nome, telefone=telefone, cpf=cpf, nascimento=nascimento,
+        conn, nome=nome, telefone=telefone, cpf=cpf or None, nascimento=nascimento,
         idempotency_key=intencao.idempotency_key, agora=agora)
     r["veredito"] = Veredito(True, (), tuple(ok)).para_trace()
     return r
 
 
-def _validar_confirmacao_cadastro(intencao, nome, cpf, ok) -> list[Violacao]:
-    """O agente tem de ter lido o nome e o CPF de volta, e ouvido um sim.
+def _ficha_existente(conn, cpf: str, telefone: str):
+    """A ficha que já existe para este CPF ou para este telefone.
 
-    É a R8 outra vez, com as entidades do cadastro: se ele leu um CPF diferente
-    do que vai gravar, a ficha nasce errada e ninguém percebe até a colisão.
+    O CPF manda quando existe; sem ele, o telefone é a identidade — é o único
+    campo obrigatório que dá para conferir contra o banco.
+    """
+    if cpf:
+        linha = conn.execute("SELECT * FROM pacientes WHERE cpf = ?", (cpf,)).fetchone()
+        if linha is not None:
+            return linha
+    if len(telefone) >= 8:
+        return conn.execute("SELECT * FROM pacientes WHERE telefone LIKE ?",
+                            (f"%{telefone[-8:]}",)).fetchone()
+    return None
+
+
+def _validar_confirmacao_cadastro(intencao, nome, telefone, cpf, ok) -> list[Violacao]:
+    """O agente tem de ter lido o nome e o telefone de volta, e ouvido um sim.
+
+    É a R8 outra vez, com as entidades do cadastro. Sem CPF, o telefone é a
+    identidade da ficha: se o agente leu um número diferente do que vai gravar,
+    a pessoa fica com um cadastro que ela nunca vai conseguir encontrar.
     """
     conf = intencao.confirmacao
     if conf is None:
         return [Violacao("R8_confirmacao",
                          "Cadastro sem confirmação verbal do paciente.", {})]
-    if interpretar_resposta(conf.resposta) != "sim":
+    if interpretar_resposta(conf.resposta, intencao.idioma) != "sim":
         return [Violacao("R8_confirmacao", "O paciente não confirmou os dados.",
                          {"resposta": conf.resposta})]
 
     dito = conf.frase_dita or ""
+    digitos_ditos = extrair_digitos(dito, intencao.idioma)
     divergencias = []
     sobrenome = nome.split()[-1] if nome.split() else ""
     if sobrenome and not casar_nome(sobrenome, tokenizar(dito), corte=0.85)["melhor"]:
         divergencias.append(f"o agente não leu o nome «{nome}» de volta")
-    # Contido, não igual: a frase boa lê o CPF **e** a data de nascimento de
-    # volta ("CPF 111 444 777 35, nascido em quinze do três de oitenta"), e
-    # comparar o total de dígitos reprovava justamente o agente que confirma
-    # tudo. Exigir os 11 dígitos em ordem continua pegando o CPF trocado.
-    if cpf and cpf not in extrair_digitos(dito):
+    # Contido, não igual: a frase boa lê nome, telefone e às vezes o CPF na
+    # mesma respiração, e comparar o total de dígitos reprovava justamente o
+    # agente que confirma tudo.
+    if telefone and telefone[-8:] not in digitos_ditos:
+        divergencias.append("o telefone lido em voz alta não é o que ia ser gravado")
+    if cpf and cpf not in digitos_ditos:
         divergencias.append("o CPF lido em voz alta não é o que ia ser gravado")
     if divergencias:
         return [Violacao("R8_confirmacao",
