@@ -156,6 +156,36 @@ drops from **90% to 60%**.
 
 ---
 
+## The seven tools
+
+The orchestrator is the only one holding tools — and **none of them writes to
+the database on its own**. The four starting with `propor_` ("propose") mean it
+literally: they assemble an *intent* and hand it to the validator, which
+decides. The other three read, or hand the call on.
+
+| Tool | What it does | Writes? | Rules it crosses |
+|---|---|:--:|---|
+| `buscar_paciente` | finds the record by phone or ID; returns the document masked | reads | — |
+| `consultar_agenda` | free slots for the specialty, already filtered by the constraint the normalizer pulled out of the caller's speech | reads | — |
+| `propor_cadastro` | opens a record for a first-time caller — name and phone | **proposes** | R1, R8, R11, R12, R13 |
+| `propor_reserva` | books a slot already offered and already confirmed out loud | **proposes** | R1–R9 |
+| `propor_reagendamento` | moves an active booking to another slot | **proposes** | R1–R9, plus R10 on the origin |
+| `propor_cancelamento` | cancels; demands the same verbal confirmation booking does | **proposes** | R1, R8, R10 |
+| `transferir_para_humano` | ends the call and hands it over, with reason and summary | records | — |
+
+R7 only applies when the caller declared a constraint — with no constraint
+there is nothing to violate. R12 only applies when there is an ID number: a
+missing document is not an invalid one.
+
+**The model has never seen the write functions.** It doesn't know
+`reservar_horario`, `cadastrar_paciente`, `reagendar` or `cancelar` — only the
+`propor_` versions, which go through the gate. The whole thesis fits in a
+naming convention.
+
+Each one in detail, with the gate diagram: **[Architecture →](https://claude.ai/code/artifact/8e4cad9f-5b25-4a44-b1da-aa158f092b54)**
+
+---
+
 ## The four decisions that carry the project
 
 ### 1. Double-booking is impossible, not unlikely

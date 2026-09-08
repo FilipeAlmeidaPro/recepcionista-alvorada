@@ -148,6 +148,36 @@ fala, e a suíte de áudio mediu o preço — extração de entidade cai de **90
 
 ---
 
+## As sete ferramentas
+
+O orquestrador é o único que segura ferramenta — e **nenhuma delas escreve no
+banco por conta própria**. As quatro que começam com `propor_` levam o nome
+literalmente: montam uma *intenção* e entregam ao validador, que decide. As
+outras três leem, ou passam a ligação adiante.
+
+| Ferramenta | O que faz | Escreve? | Regras que atravessa |
+|---|---|:--:|---|
+| `buscar_paciente` | acha a ficha por telefone ou CPF; devolve o documento mascarado | lê | — |
+| `consultar_agenda` | horários livres da especialidade, já filtrados pela restrição que o normalizador extraiu da fala | lê | — |
+| `propor_cadastro` | abre a ficha de quem nunca ligou — nome e telefone | **propõe** | R1, R8, R11, R12, R13 |
+| `propor_reserva` | marca um horário já oferecido e já confirmado em voz alta | **propõe** | R1–R9 |
+| `propor_reagendamento` | move um agendamento ativo para outro horário | **propõe** | R1–R9, mais R10 na origem |
+| `propor_cancelamento` | desmarca; exige a mesma confirmação verbal que marcar | **propõe** | R1, R8, R10 |
+| `transferir_para_humano` | encerra e passa adiante, com motivo e resumo | registra | — |
+
+A R7 só entra quando o paciente declarou uma restrição — sem restrição não há o
+que violar. A R12 só entra quando há CPF: documento ausente não é documento
+inválido.
+
+**O modelo nunca viu as funções de escrita.** Ele não conhece
+`reservar_horario`, `cadastrar_paciente`, `reagendar` nem `cancelar` — só as
+versões `propor_`, que passam pelo portão. A tese inteira cabe numa convenção
+de nomes.
+
+Detalhe de cada uma, com o desenho do portão: **[Arquitetura →](https://claude.ai/code/artifact/163f86c8-fe48-46af-8029-563ef00dbcb7)**
+
+---
+
 ## As quatro decisões que sustentam o projeto
 
 ### 1. Double-booking é impossível, não improvável

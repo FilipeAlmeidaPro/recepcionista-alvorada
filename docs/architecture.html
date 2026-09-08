@@ -303,9 +303,9 @@ database refuses.</figcaption>
 <h2>The seven tools</h2>
 <div class="prosa">
   <p>The orchestrator is the only one holding tools — and none of them writes
-  to the database on its own. The three that start with <code>propor_</code>
+  to the database on its own. The four that start with <code>propor_</code>
   ("propose") mean it literally: they assemble an <strong>intent</strong> and
-  hand it to the validator, which decides. The other four read, or hand the
+  hand it to the validator, which decides. The other three read, or hand the
   call on.</p>
 </div>
 <div class="tabela">
@@ -326,7 +326,7 @@ database refuses.</figcaption>
       <td>proposes</td><td class="n">R1–R9</td></tr>
   <tr><td class="forte"><code>propor_reagendamento</code></td>
       <td>moves an active booking to another slot</td>
-      <td>proposes</td><td class="n">R1–R10</td></tr>
+      <td>proposes</td><td class="n">R1–R9 + R10</td></tr>
   <tr><td class="forte"><code>propor_cancelamento</code></td>
       <td>cancels; demands the same verbal confirmation booking does</td>
       <td>proposes</td><td class="n">R1, R8, R10</td></tr>

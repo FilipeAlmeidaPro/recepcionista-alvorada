@@ -302,9 +302,9 @@ teste ignora as ferramentas e escreve direto no banco; o banco recusa.</figcapti
 <h2>As sete ferramentas</h2>
 <div class="prosa">
   <p>O orquestrador é o único que segura ferramenta — e nenhuma delas escreve
-  no banco por conta própria. As três que começam com <code>propor_</code>
+  no banco por conta própria. As quatro que começam com <code>propor_</code>
   levam esse nome literalmente: elas montam uma <strong>intenção</strong> e a
-  entregam ao validador, que decide. As outras quatro leem, ou passam a ligação
+  entregam ao validador, que decide. As outras três leem, ou passam a ligação
   adiante.</p>
 </div>
 <div class="tabela">
@@ -325,7 +325,7 @@ teste ignora as ferramentas e escreve direto no banco; o banco recusa.</figcapti
       <td>propõe</td><td class="n">R1–R9</td></tr>
   <tr><td class="forte"><code>propor_reagendamento</code></td>
       <td>move um agendamento ativo para outro horário</td>
-      <td>propõe</td><td class="n">R1–R10</td></tr>
+      <td>propõe</td><td class="n">R1–R9 + R10</td></tr>
   <tr><td class="forte"><code>propor_cancelamento</code></td>
       <td>desmarca; a mesma confirmação verbal que marcar exige</td>
       <td>propõe</td><td class="n">R1, R8, R10</td></tr>
